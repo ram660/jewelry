@@ -1,0 +1,16 @@
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+
+# secrets
+.env
+.env.local
+.env.*.local
+
+# local database + uploaded photos
+data/
+
+# owner's raw photos
+samples/
+inbox/
