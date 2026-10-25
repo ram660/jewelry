@@ -79,6 +79,43 @@ export function db(): DatabaseSync {
       reason TEXT NOT NULL,
       at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- Instagram inbox (see docs/INSTAGRAM.md). Customer messages, our draft replies, and the relay position.
+    CREATE TABLE IF NOT EXISTS ig_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ext_id TEXT NOT NULL UNIQUE,
+      source TEXT NOT NULL DEFAULT 'relay',
+      relay_seq INTEGER,
+      kind TEXT NOT NULL,
+      sender TEXT NOT NULL,
+      sender_label TEXT NOT NULL DEFAULT '',
+      text TEXT NOT NULL DEFAULT '',
+      ref TEXT,
+      parent TEXT,
+      at INTEGER NOT NULL,
+      product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+      needs_owner INTEGER NOT NULL DEFAULT 0,
+      reason TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS ig_events_sender ON ig_events(sender, at);
+    CREATE TABLE IF NOT EXISTS ig_drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id INTEGER NOT NULL REFERENCES ig_events(id) ON DELETE CASCADE,
+      channel TEXT NOT NULL,
+      text TEXT NOT NULL DEFAULT '',
+      intents TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'pending',
+      error TEXT,
+      sent_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS ig_drafts_event ON ig_drafts(event_id);
+    CREATE TABLE IF NOT EXISTS ig_state (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
   migrate(d);
   globalForDb.__efjDb = d;
@@ -140,7 +177,9 @@ function rowToProduct(r: Row): Product {
   const out: Row = { ...r };
   for (const f of JSON_FIELDS) {
     try {
-      out[f] = JSON.parse(String(r[f] ?? "[]"));
+      const parsed = JSON.parse(String(r[f] ?? "[]"));
+      // A column holding anything but a list (older bad data) reads as empty rather than crashing every page.
+      out[f] = Array.isArray(parsed) ? parsed.map(String) : [];
     } catch {
       out[f] = [];
     }
@@ -222,7 +261,13 @@ export function updateProduct(id: number, patch: Record<string, unknown>): Produ
     db()
       .prepare(`UPDATE products SET ${sets.join(", ")}, updated_at = datetime('now') WHERE id = ?`)
       .run(...vals, id);
-    if ("category" in patch) setSku(id, String(patch.category));
+    // The SKU follows the category only while the product is still a draft. After that it may be on a printed label.
+    if ("category" in patch && typeof patch.category === "string") {
+      const now = getProduct(id);
+      if (now && now.status === "draft" && !now.sku.startsWith(`EFJ-${SKU_CODE[patch.category] ?? "OT"}-`)) {
+        setSku(id, patch.category);
+      }
+    }
   }
   return getProduct(id);
 }

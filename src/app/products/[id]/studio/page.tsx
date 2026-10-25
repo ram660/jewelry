@@ -18,7 +18,7 @@ export default async function StudioPage({ params }: { params: Promise<{ id: str
       <StudioClient
         product={product}
         initialImages={listImages(id)}
-        demoMode={!imageProvider()}
+        realOnly={!imageProvider()}
         scoring={visionProvider() !== null}
         safeAvailable={safeModeAvailable()}
         model={activeImageModel()}

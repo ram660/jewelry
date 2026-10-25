@@ -8,9 +8,13 @@ next-env.d.ts
 .env.local
 .env.*.local
 
-# local database + uploaded photos
-data/
+# local database + uploaded photos (only the top-level folder; a leading slash keeps code folders such as src/app/inbox/ tracked)
+/data/
 
 # owner's raw photos
-samples/
-inbox/
+/samples/
+/inbox/
+
+# the relay's local queue, and any cutout test output
+/relay-data/
+/cutout-test/

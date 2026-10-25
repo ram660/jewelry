@@ -134,3 +134,17 @@ textarea { resize: vertical; min-height: 4.5rem; }
 .notice { background: var(--gold-soft); border: 1px solid var(--line); border-radius: 8px; padding: .6rem .9rem; margin-bottom: 1rem; }
 .cap { border: 1px solid var(--line); border-radius: 8px; padding: .6rem .8rem; margin-bottom: .6rem; white-space: pre-wrap; }
 ul.q { margin: .3rem 0 0; padding-left: 1.2rem; }
+
+/* Instagram inbox */
+.inbox { display: grid; grid-template-columns: 320px 1fr; gap: 1.5rem; align-items: start; }
+@media (max-width: 900px) { .inbox { grid-template-columns: 1fr; } }
+button.thread { display: grid; gap: .15rem; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: transparent; padding: .7rem .9rem; font: inherit; color: inherit; cursor: pointer; }
+button.thread:last-child { border-bottom: 0; }
+button.thread:hover, button.thread.on { background: var(--gold-soft); }
+.thread .who { font-weight: 600; }
+.thread .when { color: var(--muted); font-size: .78rem; }
+.thread .snip { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bubble { background: #f3efe7; border-radius: 12px; padding: .6rem .9rem; margin: .6rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.draft { border: 1px solid var(--line); border-radius: 10px; padding: .7rem .8rem; margin-top: .6rem; background: #fffdf8; }
+.draft textarea { margin: .4rem 0; }
+.bar .count { background: var(--gold); color: #fff; border-radius: 99px; padding: 0 .45rem; font-size: .75rem; margin-left: .3rem; }

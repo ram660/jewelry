@@ -5,6 +5,7 @@ import { getProduct, listCarousel, setCarousel } from "@/lib/db";
 import { uploadPath } from "@/lib/storage";
 import { makeZip } from "@/lib/zip";
 import { MAX_CAROUSEL } from "@/lib/types";
+import { claimProblems } from "@/lib/claims";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -26,6 +27,15 @@ export async function GET(_req: Request, { params }: Ctx) {
   const id = Number((await params).id);
   const product = getProduct(id);
   if (!product) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Never export banned wording, whatever the product status: this is the text people copy into Instagram.
+  const problems = claimProblems(product);
+  if (problems.length) {
+    return NextResponse.json(
+      { error: "Fix the wording before exporting.", problems: problems.map((x) => x.message) },
+      { status: 422 }
+    );
+  }
 
   const slides = listCarousel(id);
   if (!slides.length) {

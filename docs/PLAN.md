@@ -18,7 +18,9 @@ Related docs: [BRAND.md](BRAND.md) (voice & persona), [KNOWLEDGE_BASE.md](KNOWLE
    and bot answers are all generated from it, so they never contradict each other.
 3. **Human approval at every stage at first.** Remove approval steps one by one
    as trust in the system grows.
-4. **Hosted models only, no local downloads, and the "brain" and the "hands" are separate.**
+4. **Hosted models by default, one small local model by choice, and the "brain" and the "hands" are separate.**
+   The one exception is the BiRefNet cutout (MIT, 109 to 467 MB), which can run on the owner's computer for free
+   and in private. It is chosen with `CUTOUT_MODE` and installed with `node scripts/get-birefnet.mjs`. Nothing else runs locally.
    *Reading photos and deciding* (details, captions, match scores, later the DM bot) runs on
    Claude, Gemini or DeepInfra (Qwen3-VL). *Making pictures* runs on Gemini or fal.ai
    (Qwen-Image-Edit, BiRefNet, FLUX). Claude cannot make pictures. Provider code is isolated in
@@ -174,6 +176,9 @@ IG webhook (DM / comment / story reply)
 - **Before go-live:** test against 100+ realistic questions (we'll write the test set),
   and run in "draft only" mode for a week, where the bot suggests and you send.
 - **Stopgap until then:** ManyChat (no-code) can handle comment-to-DM keyword replies.
+- **Hosting decision needed first:** the Studio has no login and must stay off the public internet. The webhook needs a public address, so
+  build it as a separate small service (verify Meta's signature, de-duplicate events, store drafts) or add a login to the Studio before
+  exposing anything. Patterns to borrow are in [REFERENCES.md](REFERENCES.md).
 
 ### Phase 5: Orders & Fulfilment (~1–2 weeks)
 

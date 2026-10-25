@@ -1,7 +1,7 @@
 import {
   activeImageModel, activeVisionModel, backdropModel, claudeConfigured, claudeEffort, claudeModel, cutoutModel,
-  deepinfraConfigured, editModel, falConfigured, geminiConfigured, geminiImageModel, geminiTextModel, imageProvider,
-  visionModel, visionProvider,
+  deepinfraConfigured, editModel, falConfigured, geminiConfigured, geminiImageModel, geminiTextModel, igSendMode,
+  igTokenConfigured, imageProvider, openrouterConfigured, openrouterModels, relayConfigured, visionModel, visionProvider,
 } from "@/lib/config";
 import { FIDELITY_MIN } from "@/lib/visuals";
 import { hasCustomLogo } from "@/lib/brand";
@@ -15,6 +15,7 @@ function Key({ ok }: { ok: boolean }) {
 
 const NAMES = {
   claude: "Claude", gemini: "Google Gemini", deepinfra: "DeepInfra (Qwen3-VL)", fal: "fal.ai (Qwen-Image-Edit)",
+  openrouter: "OpenRouter (free models)",
 } as const;
 
 export default async function Settings() {
@@ -35,12 +36,12 @@ export default async function Settings() {
           {vision && <code>{activeVisionModel()}</code>}
         </p>
         <p>
-          <b>Making pictures:</b> {image ? `${NAMES[image]} · ` : "none (demo backdrops)"}
+          <b>Making pictures:</b> {image ? `${NAMES[image]} · ` : "none: real photos only, cutouts on backdrops drawn by code"}
           {image && <code>{activeImageModel()}</code>}
         </p>
         <p className="muted">
           Match-score warning below <code>{FIDELITY_MIN}%</code>. Change providers in <code>.env.local</code> with{" "}
-          <code>VISION_PROVIDER</code> (claude, gemini, deepinfra, demo) and <code>IMAGE_PROVIDER</code> (gemini, fal, demo),
+          <code>VISION_PROVIDER</code> (claude, gemini, deepinfra, openrouter, demo) and <code>IMAGE_PROVIDER</code> (gemini, fal, demo),
           then restart <code>npm run dev</code>. Claude cannot make pictures.
         </p>
       </div>
@@ -77,6 +78,30 @@ export default async function Settings() {
         <h2>DeepInfra (open-weight photo reading)</h2>
         <p><Key ok={deepinfraConfigured()} /></p>
         <p className="muted">Model: <code>{visionModel()}</code></p>
+      </div>
+
+      <div className="card pad">
+        <h2>OpenRouter (free photo-reading models)</h2>
+        <p><Key ok={openrouterConfigured()} /></p>
+        <ul className="muted" style={{ paddingLeft: "1.2rem" }}>
+          <li>Tried in this order: {openrouterModels().map((m) => <code key={m} style={{ marginRight: ".4rem" }}>{m}</code>)}</li>
+          <li>Free models allow 20 requests a minute and 50 a day until credits are bought. Product photos go to the model host, and free
+            hosts may keep prompts, so only your own product photos are sent. Customer messages never are.</li>
+        </ul>
+        <p className="muted">Use it with <code>VISION_PROVIDER=openrouter</code>. Change the list with <code>OPENROUTER_MODELS</code>.</p>
+      </div>
+
+      <div className="card pad">
+        <h2>Instagram inbox</h2>
+        <ul className="muted" style={{ paddingLeft: "1.2rem" }}>
+          <li>Relay (receives messages for the Studio): {relayConfigured() ? <span className="badge ok">connected</span> : <span className="badge low">not set up</span>}</li>
+          <li>Access token (needed only to send replies from here): <Key ok={igTokenConfigured()} /></li>
+          <li>Sending: <code>{igSendMode() === "live" ? "live" : "draft-only"}</code></li>
+        </ul>
+        <p className="muted">
+          Set <code>RELAY_URL</code>, <code>RELAY_PULL_TOKEN</code>, <code>IG_ACCESS_TOKEN</code> and <code>IG_SEND_MODE</code> in{" "}
+          <code>.env.local</code>. The inbox works without any of them: paste messages in by hand. See <code>docs/INSTAGRAM.md</code>.
+        </p>
       </div>
 
       <div className="card pad">

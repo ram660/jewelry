@@ -18,7 +18,26 @@ function scrub(s: string): string {
   return out.slice(0, 300);
 }
 
+/**
+ * Google's models sometimes answer "high demand" (503) for a few seconds. Retry twice with a pause before giving up.
+ * Quota and key errors are not retried, since waiting does not fix them.
+ */
 async function generate(model: string, generationConfig: object, prompt: string, jpegs: Buffer[], timeoutMs: number) {
+  const pause = Number(process.env.GEMINI_RETRY_MS) || 5000;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await generateOnce(model, generationConfig, prompt, jpegs, timeoutMs);
+    } catch (e) {
+      if (attempt < 2 && (e as { retryable?: boolean }).retryable) {
+        await new Promise((r) => setTimeout(r, pause * (attempt + 1)));
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
+async function generateOnce(model: string, generationConfig: object, prompt: string, jpegs: Buffer[], timeoutMs: number) {
   const res = await fetch(`${geminiBase()}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: { "x-goog-api-key": process.env.GEMINI_API_KEY ?? "", "Content-Type": "application/json" },
@@ -51,7 +70,10 @@ async function generate(model: string, generationConfig: object, prompt: string,
     if (res.status === 403) throw new Error(`Gemini refused the request (403): ${scrub(msg)}`);
     if (res.status === 404) throw new Error(`Gemini model “${model}” was not found. Check GEMINI_TEXT_MODEL / GEMINI_IMAGE_MODEL in .env.local.`);
     if (res.status === 429) throw new Error("Gemini rate limit or quota reached. Wait a minute, or check your plan and billing.");
-    throw new Error(`Gemini request failed (${res.status}): ${scrub(msg)}`);
+    const err = new Error(`Gemini request failed (${res.status}): ${scrub(msg)}`);
+    // 500, 502, 503 and 504 are Google-side hiccups that usually clear within seconds.
+    if ([500, 502, 503, 504].includes(res.status)) (err as Error & { retryable?: boolean }).retryable = true;
+    throw err;
   }
   if (json.promptFeedback?.blockReason) {
     throw new Error(`Gemini blocked this request (${json.promptFeedback.blockReason}). Try different photos or wording.`);

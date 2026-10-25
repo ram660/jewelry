@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { deleteProduct, getProduct, listImages, markAnalysed, updateProduct } from "@/lib/db";
+import { deleteProduct, getProduct, markAnalysed, updateProduct } from "@/lib/db";
 import { removeProductDir } from "@/lib/storage";
 import { READY_STATES, checkProduct } from "@/lib/claims";
 import { ProductPatch } from "@/lib/productPatch";
+import { approvedPhotoCount } from "@/lib/readiness";
 import type { Product } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -15,6 +16,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 
 export async function PATCH(req: Request, { params }: Ctx) {
   const id = Number((await params).id);
+  if (!Number.isInteger(id) || id < 1) return NextResponse.json({ error: "Bad product id." }, { status: 400 });
   const current = getProduct(id);
   if (!current) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const body = await req.json().catch(() => null);
@@ -35,7 +37,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   // with a banned claim or a missing price can reach Instagram.
   const merged = { ...current, ...patch } as Product;
   if (READY_STATES.includes(merged.status)) {
-    const blockers = checkProduct(merged, listImages(id).length).filter((x) => x.level === "block");
+    const blockers = checkProduct(merged, approvedPhotoCount(id)).filter((x) => x.level === "block");
     if (blockers.length) {
       return NextResponse.json(
         { error: "Fix these before the product can be marked ready.", problems: blockers.map((b) => b.message) },

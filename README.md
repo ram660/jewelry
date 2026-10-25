@@ -83,14 +83,32 @@ Blocked in any text of a Ready product: "solid gold", "real/genuine/pure gold", 
 "waterproof", tarnish-free / fade-proof / lasts-forever claims, "hypoallergenic", and any karat other than 10K.
 Also required: name, a price, at least one photo and "10K gold-plated" in the plating field.
 
-## AI providers (all hosted, nothing runs on your PC)
+## Cutouts on your own computer (optional, free, private)
+
+"Remove background" normally uses the free gold-colour method, and fal.ai's BiRefNet when you have a fal key. You can also run
+[BiRefNet](https://github.com/ZhengPeng7/BiRefNet) (MIT licence) on this computer. It works on any metal, needs no key and never uploads a photo.
+
+```
+node scripts/get-birefnet.mjs lite            # one-time download, 214 MB, checked against its published checksum
+node scripts/cutout-local.mts photo.jpg out   # try it on one of your photos, writes out/photo-cutout.png and a preview
+```
+
+Set `CUTOUT_MODE=local` in `.env.local` to use it for every cutout. With the default `auto`, it is used when the gold-colour method
+cannot find the piece (silver, rose gold) and there is no fal key.
+
+Honest numbers from a laptop (Intel Core Ultra 5, 15 GB RAM, on battery): about 15 to 45 seconds per photo, so cutting out five photos
+takes a few minutes. It is much faster plugged in. The graphics chip (Intel Arc) crashed the driver with this model, so it is CPU only.
+The lite model is smaller than the one fal.ai runs, so fine chains can come out slightly ragged. Zoom in and check the edges before approving.
+Models are stored in `~/.efj-studio/models` (outside the project, so OneDrive does not upload them).
+
+## AI providers (hosted, except the optional cutout above)
 
 Two jobs, chosen separately in `.env.local` (see `.env.example`):
 
 | Job | `VISION_PROVIDER` reads photos and decides | `IMAGE_PROVIDER` makes pictures |
 |---|---|---|
 | Does | Product details, captions, match scores (and later the Instagram DM bot) | Scenes, on-model, scale shots |
-| Options | `claude`, `gemini`, `deepinfra`, `demo` | `gemini`, `fal`, `demo` |
+| Options | `claude`, `gemini`, `deepinfra`, `openrouter`, `demo` | `gemini`, `fal`, `none` (no AI pictures) |
 
 | Key | Used for |
 |---|---|
@@ -98,8 +116,38 @@ Two jobs, chosen separately in `.env.local` (see `.env.example`):
 | `GEMINI_API_KEY` | Gemini: reads photos (`gemini-3.1-flash-lite`) and makes pictures (`gemini-3.1-flash-image`) |
 | `FAL_KEY` | fal.ai: open-weight pictures (Qwen-Image-Edit-Plus) and the safe-mode cutout (BiRefNet) + backdrop (FLUX schnell) |
 | `DEEPINFRA_API_KEY` | DeepInfra: open-weight photo reading (Qwen3-VL) |
+| `OPENROUTER_API_KEY` | OpenRouter: **free** photo-reading models behind one key (see below) |
+
+### Free photo reading with OpenRouter
+
+Set `OPENROUTER_API_KEY` and `VISION_PROVIDER=openrouter`. The Studio then reads photos, writes the details and checks pictures with free
+models, tried in order, so a busy one hands over to the next. The defaults were measured on this app's own jobs: both scored 15 of 15 on
+writing product details with the brand rules, and both told a faithful picture from an altered one.
+
+- **Limits:** 20 requests a minute and 50 a day until you buy credits (about 1,000 a day after $10). One analysis or one match check is one request.
+- **Privacy:** free hosts may keep prompts. Only your own product photos are sent. Customer messages never are, because the Instagram
+  reply writer runs on rules, not an AI service. `OPENROUTER_PRIVACY=strict` limits routing to hosts that promise not to keep prompts, but few free models qualify.
+- **Speed:** about 40 seconds for a full analysis, because these models think before answering.
+- **Compare models yourself:** `OPENROUTER_API_KEY=... node scripts/bench-models.mts --free` tests every free vision model on both jobs.
 
 Recommended setup: `VISION_PROVIDER=claude` (best judgement and writing) + `IMAGE_PROVIDER=gemini` (pictures).
+
+**Current setup in use: real photos only.** Gemini reads photos and writes the text. **No AI makes any picture.** BiRefNet on this computer cuts
+your jewellery out of your own photo, and the backdrop is drawn by code, so your real product pixels are never redrawn:
+
+```
+VISION_PROVIDER=gemini
+IMAGE_PROVIDER=none
+CUTOUT_MODE=local
+```
+
+What this means in the Studio:
+- **Remove background, touch-ups, info cards and the carousel** work as before.
+- **Styled scenes** always use your real cutout on a backdrop drawn by code (marble, linen, cedar, rainy window, sea glass, golden hour, velvet,
+  Diwali, Lunar New Year). They are clean, stylised surfaces rather than photographs. They are unapproved until you approve them.
+- **On-model and scale shots are off**, because only an AI can make them. Photograph the piece worn and upload it instead.
+- A Gemini key alone never starts picture-making: `IMAGE_PROVIDER` left on `auto` only uses fal.ai, never Gemini. Choose Gemini pictures on purpose
+  with `IMAGE_PROVIDER=gemini`. Preview the backdrops with `node scripts/backdrops-preview.mts`.
 
 Scenes have two modes. **Natural** re-draws the scene, so light looks real but small details on the piece can drift
 (Gemini turned a thin-band ring into a chunky solitaire in testing, which is why the match score matters).
@@ -118,6 +166,10 @@ real photos and gets a match score (red under `FIDELITY_MIN`, default 75). Only 
 | `src/lib/ai.ts` | Product analysis (photo → category, copy, captions, owner questions) |
 | `src/lib/visuals.ts` | Touch-up, natural and safe-mode scenes, match check |
 | `src/lib/providers/` | fal.ai and DeepInfra clients (the only code that talks to them) |
+| `src/lib/localCutout.ts` | BiRefNet cutout that runs on this computer |
+| `src/lib/patch.ts`, `src/lib/readiness.ts` | Validation of product edits, and the ready re-check after a photo changes |
+| `relay/` | The small public Instagram webhook relay (see `docs/INSTAGRAM.md`). The Studio itself never goes online |
+| `src/app/inbox/`, `src/lib/ella.ts`, `src/lib/inboxService.ts` | The Instagram inbox: customer messages, draft replies, approve and send |
 | `src/lib/config.ts` | Model IDs and key checks |
 | `src/lib/presets.ts` | Scene and pose presets (edit these to change the looks) |
 | `src/lib/claims.ts` | Banned-phrase scanner and readiness checks |

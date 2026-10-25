@@ -9,6 +9,7 @@ import { localCutout as birefnetCutout, localCutoutAvailable } from "./localCuto
 import { alphaShare, pickCutout } from "./cutoutChoice";
 import { CANVAS, compositeProduct, creamBackdrop } from "./composite";
 import { CutoutError, localCutout } from "./cutout";
+import { drawnBackdrop } from "./backdrops";
 import { falDownload, falRun, type FalImages } from "./providers/fal";
 import { geminiImage } from "./providers/gemini";
 import { askVision } from "./providers/vision";
@@ -81,15 +82,6 @@ async function enhance(buf: Buffer) {
     .modulate({ brightness: 1.02, saturation: 1.04 })
     .sharpen({ sigma: 0.8 })
     .jpeg({ quality: 92 })
-    .toBuffer();
-}
-
-/** No fal key: put the real photo on a coloured backdrop so the whole workflow can be tried. */
-async function demoComposite(buf: Buffer, preset: Preset) {
-  const photo = await sharp(buf).rotate().resize(880, 880, { fit: "inside" }).toBuffer();
-  return sharp({ create: { ...CANVAS, channels: 3, background: preset.demo } })
-    .composite([{ input: photo, gravity: "center" }])
-    .jpeg({ quality: 88 })
     .toBuffer();
 }
 
@@ -206,19 +198,25 @@ async function backdropFor(prompt: string): Promise<{ buf: Buffer; via: string }
   return { buf: await geminiImage(prompt, []), via: activeImageModel() };
 }
 
-/** Safe mode: your real product pixels on an AI-made backdrop. */
+/**
+ * Safe mode: your real product pixels on a backdrop. The backdrop is made by the image provider when there is one,
+ * and drawn by code (no AI, see backdrops.ts) when there is not.
+ */
 async function generateSafeScene(
   source: Buffer, sceneId: string, category: string
-): Promise<{ buf: Buffer; prompt: string; via: string }> {
+): Promise<{ buf: Buffer; prompt: string; via: string; drawn: boolean }> {
   const backdropDesc = SCENE_BACKDROP[sceneId];
   if (!backdropDesc) throw new Error("This scene has no safe-mode backdrop.");
 
   const cut = await cutoutFor(source);
-  const prompt = `Empty product-photography backdrop: ${backdropDesc}. Nothing on the surface: no jewellery, no objects, no people, no text. Clear open space in the centre of the frame. Photorealistic, portrait 4:5.`;
-  const bd = await backdropFor(prompt);
+  const drawn = !imageProvider();
+  const prompt = drawn
+    ? `Backdrop drawn by code (no AI): ${backdropDesc}`
+    : `Empty product-photography backdrop: ${backdropDesc}. Nothing on the surface: no jewellery, no objects, no people, no text. Clear open space in the centre of the frame. Photorealistic, portrait 4:5.`;
+  const bd = drawn ? { buf: await drawnBackdrop(sceneId), via: "drawn backdrop" } : await backdropFor(prompt);
   // Things that hang (chains, necklaces, sets) should not cast a ground shadow.
   const hangs = ["chain", "necklace", "set"].includes(category);
-  return { buf: await compositeProduct(cut.png, bd.buf, { shadow: !hangs }), prompt, via: `${cut.via} + ${bd.via}` };
+  return { buf: await compositeProduct(cut.png, bd.buf, { shadow: !hangs }), prompt, via: `${cut.via} + ${bd.via}`, drawn };
 }
 
 /** Clean background: your real jewellery on a plain cream studio backdrop. No AI picture is made. */
@@ -367,7 +365,12 @@ export async function makeVisual(p: Product, images: ProductImage[], req: Visual
   // Up to 3 originals as references: more angles help the model keep the design right.
   const refImages = originals.slice(0, 3);
   const refs = await Promise.all(refImages.map(readImage));
-  const safe = req.kind === "scene" && req.mode === "safe";
+  const noAI = !imageProvider();
+  // Scenes with no AI picture provider always keep your real pixels. On-model and scale shots can only be made by an AI.
+  const safe = req.kind === "scene" && (noAI || req.mode === "safe");
+  if (noAI && req.kind !== "scene") {
+    throw new Error("On-model and scale shots are made by an AI picture model, and you have chosen real photos only (IMAGE_PROVIDER=none).");
+  }
 
   let buf: Buffer;
   let model: string;
@@ -375,17 +378,17 @@ export async function makeVisual(p: Product, images: ProductImage[], req: Visual
   let outLabel = label;
   let fidelity: { score: number | null; notes: string | null } = { score: null, notes: null };
 
-  if (!imageProvider()) {
-    buf = await demoComposite(refs[0], preset);
-    model = "demo";
-    fidelity = { score: null, notes: "Demo mode: your real photo on a placeholder backdrop. Add an AI key for real images." };
-  } else if (safe) {
+  if (safe) {
     const r = await generateSafeScene(refs[0], req.preset, p.category);
     buf = r.buf;
     usedPrompt = r.prompt;
     model = r.via;
     outLabel = `${label} · real product`;
-    fidelity = { score: null, notes: `Your jewellery is cut out of your own photo (not redrawn); the backdrop is AI-made. Edges, shadow and colour can shift slightly, so check it against the piece.${r.via.startsWith("local ") ? "" : " The outline was found by an AI model."}` };
+    if (r.drawn) {
+      fidelity = { score: null, notes: "Your real product pixels on a backdrop drawn by code. No AI picture was made. Zoom in and check the edges and the chain." };
+    } else {
+      fidelity = { score: null, notes: `Your jewellery is cut out of your own photo (not redrawn); the backdrop is AI-made. Edges, shadow and colour can shift slightly, so check it against the piece.${r.via.startsWith("local ") ? "" : " The outline was found by an AI model."}` };
+    }
   } else {
     buf = await generateEdit(prompt, refs);
     model = activeImageModel();

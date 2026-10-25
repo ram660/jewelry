@@ -34,7 +34,8 @@ export default function ProductEditor({
   const fileInput = useRef<HTMLInputElement>(null);
 
   const dirty = useMemo(() => JSON.stringify(p) !== JSON.stringify(saved), [p, saved]);
-  const checks = useMemo(() => checkProduct(p, images.length), [p, images.length]);
+  const approvedCount = images.filter((i) => i.approved).length;
+  const checks = useMemo(() => checkProduct(p, approvedCount), [p, approvedCount]);
   const blockers = checks.filter((c) => c.level === "block");
   const warnings = checks.filter((c) => c.level === "warn");
 

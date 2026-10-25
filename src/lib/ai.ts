@@ -38,7 +38,8 @@ async function loadBrand(): Promise<string> {
   }
 }
 
-function buildPrompt(p: Product, brand: string): string {
+/** The exact instructions sent to the vision model. Exported so scripts/bench-models.mts tests models with the real prompt. */
+export function buildPrompt(p: Product, brand: string): string {
   const known = [
     `Owner's product name: ${p.name || "(none given)"}`,
     p.base_metal && `Base metal (owner confirmed): ${p.base_metal}`,
@@ -59,10 +60,11 @@ KNOWN FACTS:
 ${known}
 
 HARD RULES
-- Plating: if the owner's plating note says 10K gold-plated AND the metal in the photos looks gold, call it "10K gold-plated". If the metal looks silver, white or rose, do NOT call it gold: describe the colour you see and ask the owner what the plating is in "owner_questions". Never write "10K gold" (without "plated"), "solid gold", "real gold", "waterproof", "tarnish-free", "lasts forever" or "hypoallergenic".
-- Describe only what is visible in the photos. Do not invent stones, sizes, weight, base metal or nickel-free status.
+- Plating: if the owner's plating note says 10K gold-plated AND the metal in the photos looks gold, call it "10K gold-plated". If the metal looks silver, white or rose, do NOT call it gold: describe the colour you see and ask the owner what the plating is in "owner_questions". Never write "10K gold" (without "plated"), "solid gold", "real/genuine/pure/authentic gold", any other karat, "waterproof", "water-resistant", "tarnish-free", "fade-proof", "lasts forever", "lifetime", "hypoallergenic", "skin-safe", "nickel-free". Never promise how long it lasts.
+- Describe only what is visible in the photos. Do not invent stones, sizes, weight, base metal, plating thickness, nickel-free status, shipping, delivery, returns, gift-box or response-time details.
 - Marks on the piece: list every brand name, logo, monogram, hallmark or engraved word you can read on the piece, its stand or a tag in "marks_seen", copied exactly as it appears (keep the spelling and capitals; use an empty list if there are none). Never leave out or change a mark you can see.
 - If "marks_seen" is not empty: describe the design neutrally (shape, finish, stones). Do not use another brand's name as a selling point in the name, descriptions, captions or hashtags, do not say the piece is authentic, genuine, original, a replica, a dupe or "inspired by" anyone, and do not guess where it was made. The owner decides that.
+- Any price, size, stone or delivery detail inside the BRAND GUIDE example lines is an illustration, never a fact about this piece. Do not copy it.
 - Anything a photo cannot show (base metal, size/length, weight, nickel-free, plating thickness) goes in "owner_questions" as short questions for the owner, unless it is already listed under KNOWN FACTS.
 - Canadian spelling (jewellery, colour). No more than 2 emojis per caption, chosen from: ✨ 💛 🤍 🎁 📦 🌿.
 - Do not put a price in captions unless one is given under KNOWN FACTS.
@@ -72,8 +74,8 @@ Reply with ONLY a JSON object with exactly these keys:
   "category": one of ${JSON.stringify(CATEGORIES)},
   "subcategory": "e.g. stackable, statement, tennis, cuban, paperclip, hoop, signet",
   "gender": "women" | "men" | "unisex",
-  "colour_finish": "e.g. yellow gold, polished",
-  "stones": "e.g. clear cubic zirconia, none",
+  "colour_finish": "the colour and finish you can see, for example yellow, polished",
+  "stones": "only stones you can clearly see, or an empty string if none are visible",
   "name_suggestions": [3 short, elegant product names],
   "style_tags": [3-6 lowercase tags],
   "occasion_tags": [2-5 lowercase tags],
@@ -111,13 +113,12 @@ function demoAnalysis(p: Product): AnalysisResult {
   const facts = { name: p.name, category, price_cad: p.price_cad, sizes: p.sizes, plating: p.plating, colour_finish: p.colour_finish };
   const gender = (["women", "men", "unisex"] as const).find((g) => g === p.gender) ?? "unisex";
   return {
-    category,
-    // Visual facts can't be known without seeing the photo: keep whatever the owner already entered.
-    subcategory: p.subcategory,
-    gender,
-    colour_finish: p.colour_finish,
-    stones: p.stones,
-    name_suggestions: p.name ? [p.name] : [],
+    category: p.category === "other" ? "ring" : p.category,
+    subcategory: "demo",
+    gender: "women",
+    colour_finish: "", // never invent a finish in demo mode; the [DEMO] markers below also block "ready"
+    stones: "",
+    name_suggestions: [`${name}`, `${name} Classic`, `${name} Everyday`],
     style_tags: ["minimal", "everyday", "layering"],
     occasion_tags: ["gift", "daily wear"],
     ...templateDescriptions(facts),

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AUTHENTICITY, CATEGORIES, GENDERS, STATUSES } from "./types";
+import { AUTHENTICITY, CATEGORIES, GENDERS, STATUSES } from "./types.ts";
 
 /**
  * What PATCH /api/products/[id] accepts. Forms send numbers as text, so "12.50" is fine, "" or null clears the

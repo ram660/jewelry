@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start -H 127.0.0.1",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --no-warnings scripts/workflow.test.mts"
+    "test": "node --test --no-warnings scripts/claims.test.mts scripts/patch.test.mts scripts/workflow.test.mts scripts/relay.test.mts scripts/ella.test.mts scripts/guard.test.mts scripts/guardrequest.test.mts scripts/openrouter.test.mts scripts/gemini.test.mts scripts/backdrops.test.mts scripts/config.test.mts scripts/reviewChecklist.test.mts",
+    "cutout:test": "node --no-warnings scripts/cutout-local.mts",
+    "relay": "node relay/server.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

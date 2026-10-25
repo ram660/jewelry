@@ -32,7 +32,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     // New AI text must not silently break a ready product: send it back to draft for review.
     let demoted = false;
     if (updated && READY_STATES.includes(updated.status)) {
-      if (checkProduct(updated, images.length).some((x) => x.level === "block")) {
+      if (checkProduct(updated, images.filter((i) => i.approved).length).some((x) => x.level === "block")) {
         updated = updateProduct(id, { status: "draft" });
         demoted = true;
       }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { deleteImage, getImage, makePrimary, setApproved, setFidelity } from "@/lib/db";
 import { removeFiles } from "@/lib/storage";
+import { demoteIfBlocked } from "@/lib/readiness";
 
 export const runtime = "nodejs";
 type Ctx = { params: Promise<{ id: string }> };
@@ -35,7 +36,12 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Send a JSON object." }, { status: 400 });
   const body = parsed.data;
 
-  if (body.approved !== undefined) setApproved(id, body.approved);
+  const before = getImage(id)!;
+  if (typeof body.approved === "boolean") {
+    setApproved(id, body.approved);
+    // Un-approving the last photo must not leave a ready product without one.
+    if (!body.approved) demoteIfBlocked(before.product_id);
+  }
   if (body.primary) makePrimary(id);
   if (body.fidelity_score !== undefined || body.fidelity_notes !== undefined) {
     setFidelity(id, {
@@ -48,6 +54,9 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
 export async function DELETE(_req: Request, { params }: Ctx) {
   const img = deleteImage(Number((await params).id));
-  if (img) await removeFiles(img.path, img.thumb_path);
+  if (img) {
+    await removeFiles(img.path, img.thumb_path);
+    demoteIfBlocked(img.product_id);
+  }
   return NextResponse.json({ ok: true });
 }

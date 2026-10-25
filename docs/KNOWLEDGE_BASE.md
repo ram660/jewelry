@@ -29,19 +29,18 @@ Until it's filled in, the bot hands that topic to a human.
 ## 2. Approved answers
 
 ### "Is this real gold?" / "Is it solid gold?"
-It's **10K gold-plated**: a layer of 10K gold bonded over a [base metal] core.
+It's **10K gold-plated**: a thin layer of 10K gold plating over a [base metal] core.
 It is not solid gold. That's why it's priced as fashion jewellery. You get the
 warm gold look for everyday wear.
 
 ### "What does 10K mean?"
 Karat (K) measures gold purity out of 24. 10K means 10 parts gold out of 24
-(about 41.7% gold), mixed with other metals. That makes it harder-wearing and a
-bit softer in colour than 14K or 18K. On our pieces, the 10K gold is the
-*plating* layer.
+(about 41.7% gold). On our pieces, the 10K gold is the *plating* layer.
+Do not compare it with other karats or describe how durable it is.
 
 ### "Will it tarnish / fade?"
 All plated jewellery wears over time. How fast depends on how often you wear it
-and what it touches. With care, it keeps its shine much longer (see care tips).
+and what it touches. Good care helps slow wear (see care tips).
 Never promise a number of months or years unless the owner has set one.
 
 ### "Can I shower / swim / work out in it?"
@@ -56,7 +55,7 @@ back to you." Then hand off to a human.
 
 ### "Will it turn my finger green?"
 Some base metals (like brass or copper) can react with skin, sweat or lotion and
-leave a temporary mark once the plating wears. It washes off and isn't harmful.
+leave a temporary mark once the plating wears. It usually washes off with soap and water. If the customer mentions redness or irritation, tell them to stop wearing it and hand off to the owner.
 Keeping the piece dry and applying lotion before putting it on helps.
 
 ### Care tips (standard)
@@ -97,6 +96,8 @@ or policy exceptions.
 - The customer asks for a person
 
 ## 4. Compliance guardrails (Canada)
+
+*Summary only, not legal advice. Confirm against the current regulations or with a lawyer before relying on it.*
 
 - **Precious Metals Marking Act & Regulations:** plated items must be described
   as plated (for example "10K gold-plated" / "10K GP"), never as "10K gold". Check

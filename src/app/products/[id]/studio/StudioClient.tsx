@@ -6,6 +6,7 @@ import { SCALE_PRESET, SCENES, SKIN_TONES, posesFor } from "@/lib/presets";
 import PosterMaker from "./PosterMaker";
 import { FORMATS, type FormatId } from "@/lib/posters";
 import { LOOKS, LOOK_IDS, type LookId } from "@/lib/looks";
+import { checklistFor } from "@/lib/reviewChecklist";
 
 type Job = { label: string; body: Record<string, unknown> };
 type LogLine = { ok: boolean; text: string };
@@ -17,13 +18,16 @@ const KIND_RANK: Record<string, number> = {
 const isStory = (img: ProductImage) => (img.kind === "poster" || img.kind === "studio") && /Story/.test(img.label ?? "");
 
 export default function StudioClient({
-  product, initialImages, demoMode, scoring, safeAvailable, model, fidelityMin,
+  product, initialImages, realOnly, scoring, safeAvailable, model, fidelityMin,
 }: {
-  product: Product; initialImages: ProductImage[]; demoMode: boolean; scoring: boolean; safeAvailable: boolean;
+  product: Product; initialImages: ProductImage[]; realOnly: boolean; scoring: boolean; safeAvailable: boolean;
   model: string; fidelityMin: number;
 }) {
   const [images, setImages] = useState<ProductImage[]>(initialImages);
-  const [safeMode, setSafeMode] = useState(false);
+  // Safe mode (your real product pixels, only the backdrop is made) is the default: the jewellery must never change.
+  // With no AI picture provider (realOnly) it is the only mode, and the backdrop is drawn by code.
+  const [safeMode, setSafeMode] = useState(true);
+  const useSafe = realOnly || (safeMode && safeAvailable);
   const [selScenes, setSelScenes] = useState<string[]>([]);
   const [selPoses, setSelPoses] = useState<string[]>([]);
   const [skin, setSkin] = useState<string>("medium");
@@ -162,10 +166,10 @@ export default function StudioClient({
     <>
       <h1>Visual Studio <span className="muted" style={{ fontSize: "1rem" }}>{product.name || product.sku}</span></h1>
 
-      {demoMode ? (
+      {realOnly ? (
         <div className="notice">
-          <b>Demo mode.</b> No image provider is active, so scenes use your real photo on a plain coloured backdrop so you
-          can try the whole workflow. Background removal, touch-ups, posters and the carousel download are fully real.
+          <b>Real photos only.</b> No AI makes any picture here. Your jewellery is cut out of your own photo (BiRefNet) and placed on a
+          backdrop drawn by code, so the piece itself is never redrawn. On-model and scale shots need an AI picture model, so they are off.
         </div>
       ) : (
         <p className="muted">
@@ -263,13 +267,13 @@ export default function StudioClient({
       <div className="card pad">
         <h2>3 · AI styled scenes</h2>
         <p className="muted">Your piece in a styled setting. Pick the looks you want.</p>
-        <label className={`chip ${safeMode && safeAvailable ? "on" : ""}`} style={{ marginBottom: ".7rem", opacity: safeAvailable ? 1 : 0.55 }}>
-          <input type="checkbox" checked={safeMode && safeAvailable} disabled={!safeAvailable} onChange={(e) => setSafeMode(e.target.checked)} />
-          Safe mode: keep my real product pixels, make only the background
+        <label className={`chip ${useSafe ? "on" : ""}`} style={{ marginBottom: ".7rem", opacity: realOnly ? 0.75 : 1 }}>
+          <input type="checkbox" checked={useSafe} disabled={realOnly} onChange={(e) => setSafeMode(e.target.checked)} />
+          {realOnly ? "Real product pixels on a drawn backdrop (always on)" : "Safe mode: keep my real product pixels, make only the background"}
         </label>
         <p className="muted" style={{ marginTop: 0, fontSize: ".85rem" }}>
-          {!safeAvailable
-            ? "Safe mode needs an AI image provider (a Gemini or fal.ai key) to make the backdrop."
+          {realOnly
+            ? "Your jewellery is cut out of your photo and placed on a backdrop drawn by code, so it can never change. The backdrops are clean, stylised surfaces rather than photographs. Looks best with a plain-background photo."
             : safeMode
             ? "Your jewellery is cut out of your photo and placed on an AI-made backdrop; the piece itself is not redrawn, but edges, shadow and colour can shift slightly, so check it against the piece. Looks best with a plain-background photo; lighting may feel less natural."
             : "Natural mode re-draws the whole scene, so light and reflections look real, but small details on the piece can drift. Check the match score before approving."}
@@ -286,8 +290,8 @@ export default function StudioClient({
           <button
             className="btn" disabled={!!running || !selScenes.length || !originals.length}
             onClick={() => runJobs(selScenes.map((id) => ({
-              label: SCENES.find((s) => s.id === id)!.label + (safeMode && safeAvailable ? " · real product" : ""),
-              body: { kind: "scene", preset: id, mode: safeMode && safeAvailable ? "safe" : "natural" },
+              label: SCENES.find((s) => s.id === id)!.label + (useSafe ? " · real product" : ""),
+              body: { kind: "scene", preset: id, mode: useSafe ? "safe" : "natural" },
             })))}
           >
             Create {selScenes.length || ""} scene{selScenes.length === 1 ? "" : "s"}
@@ -301,6 +305,7 @@ export default function StudioClient({
       <div className="card pad">
         <h2>4 · AI on-model shots</h2>
         <p className="muted">The piece worn by a model. Use different skin tones so more customers see themselves.</p>
+        {realOnly && <div className="notice">Off: on-model pictures are made by an AI, and you have chosen real photos only. Photograph the piece worn instead and add it on the product page.</div>}
         <div className="chips">
           {poses.map((s) => (
             <label key={s.id} className={`chip ${selPoses.includes(s.id) ? "on" : ""}`}>
@@ -315,7 +320,7 @@ export default function StudioClient({
             <option value="all">All three tones</option>
           </select>
           <button
-            className="btn" disabled={!!running || !selPoses.length || !originals.length}
+            className="btn" disabled={realOnly || !!running || !selPoses.length || !originals.length}
             onClick={() => {
               const tones = skin === "all" ? SKIN_TONES.map((t) => t.id) : [skin];
               runJobs(selPoses.flatMap((id) => tones.map((t) => ({
@@ -335,7 +340,7 @@ export default function StudioClient({
           AI cannot guarantee true size. For rings and earrings, a real photo next to a coin is the honest way to show scale.
           Only approve an AI scale shot if the proportions match the real piece.
         </div>
-        <button className="btn ghost" disabled={!!running || !originals.length}
+        <button className="btn ghost" disabled={realOnly || !!running || !originals.length}
           onClick={() => runJobs([{ label: SCALE_PRESET.label, body: { kind: "scale" } }])}>
           Create scale shot
         </button>
@@ -355,10 +360,8 @@ export default function StudioClient({
         : (
           <div className="tiles">
             {review.map((img) => (
-              <Tile key={img.id} img={img} fidelityMin={fidelityMin}>
-                <button className="btn small" onClick={() => approve(img)}>Approve</button>
-                <button className="btn small danger" onClick={() => del(img)}>Delete</button>
-              </Tile>
+              <ReviewTile key={img.id} img={img} category={product.category} fidelityMin={fidelityMin}
+                onApprove={() => approve(img)} onDelete={() => del(img)} />
             ))}
           </div>
         )}
@@ -454,3 +457,36 @@ function Tile({
     </div>
   );
 }
+
+// Cutouts and generated pictures: the owner ticks each check against the real photo before Approve unlocks.
+function ReviewTile({
+  img, category, fidelityMin, onApprove, onDelete,
+}: { img: ProductImage; category: string; fidelityMin: number; onApprove: () => void; onDelete: () => void }) {
+  const checks = checklistFor(category, img.kind);
+  const [ticked, setTicked] = useState<string[]>([]);
+  const ready = checks.every((c) => ticked.includes(c));
+  return (
+    <Tile img={img} fidelityMin={fidelityMin}>
+      {checks.length > 0 && (
+        <div style={{ width: "100%", fontSize: ".82rem", marginBottom: ".3rem" }}>
+          <div className="muted" style={{ marginBottom: ".2rem" }}>Compare with your real photo, then tick each:</div>
+          {checks.map((c) => (
+            <label key={c} style={{ display: "flex", gap: ".4rem", alignItems: "flex-start", margin: ".15rem 0" }}>
+              <input type="checkbox" checked={ticked.includes(c)}
+                onChange={() => setTicked(ticked.includes(c) ? ticked.filter((x) => x !== c) : [...ticked, c])} />
+              {c}
+            </label>
+          ))}
+          {img.kind === "on_model" && (
+            <div className="muted" style={{ marginTop: ".3rem" }}>
+              Not a sizing guide: on-model pictures do not show true size or fit.
+            </div>
+          )}
+        </div>
+      )}
+      <button className="btn small" disabled={!ready} onClick={onApprove}>Approve</button>
+      <button className="btn small danger" onClick={onDelete}>Delete</button>
+    </Tile>
+  );
+}
+
