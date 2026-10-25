@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getProduct, listImages } from "@/lib/db";
 import { MAX_PHOTOS, ingestFiles } from "@/lib/storage";
 import { claimContext, scanText } from "@/lib/claims";
+import { describeDuplicates, findDuplicateUploads } from "@/lib/duplicates";
 
 export const runtime = "nodejs";
 type Ctx = { params: Promise<{ id: string }> };
@@ -50,6 +51,13 @@ export async function POST(req: Request, { params }: Ctx) {
     const problems = scanText(`${label}\n${text}`, claimContext(product));
     if (problems.length) {
       return NextResponse.json({ error: `The poster text has ${problems.join("; ")}. Change the wording first.` }, { status: 422 });
+    }
+  }
+
+  if (kind === "original" && form.get("allowDuplicates") !== "1") {
+    const dup = await findDuplicateUploads(files);
+    if (dup.existing.length || dup.repeated.length) {
+      return NextResponse.json({ error: describeDuplicates(dup), code: "duplicate_photos", ...dup }, { status: 409 });
     }
   }
 

@@ -2,9 +2,11 @@ import fs from "node:fs/promises";
 import sharp from "sharp";
 import { z } from "zod";
 import {
-  activeImageModel, backdropModel, cutoutModel, cutoutResolution, cutoutVariant, editModel, falConfigured, imageProvider,
-  visionProvider,
+  activeImageModel, backdropModel, cutoutMode, cutoutModel, cutoutResolution, cutoutVariant, editModel, falConfigured,
+  imageProvider, visionProvider,
 } from "./config";
+import { localCutout as birefnetCutout, localCutoutAvailable } from "./localCutout";
+import { alphaShare, pickCutout } from "./cutoutChoice";
 import { CANVAS, compositeProduct, creamBackdrop } from "./composite";
 import { CutoutError, localCutout } from "./cutout";
 import { falDownload, falRun, type FalImages } from "./providers/fal";
@@ -144,14 +146,48 @@ async function falCutout(source: Buffer): Promise<Buffer> {
  * neither local method can find the piece.
  */
 async function cutoutFor(source: Buffer): Promise<{ png: Buffer; via: string }> {
-  if (imageProvider() === "fal") return { png: await falCutout(source), via: cutoutModel() };
-  try {
+  const mode = cutoutMode();
+  if (mode === "fal" || (mode === "auto" && imageProvider() === "fal")) return { png: await falCutout(source), via: cutoutModel() };
+
+  const builtIn = async () => {
     const cut = await localCutout(source);
     return { png: cut.png, via: cut.method === "gold" ? "local gold-colour cutout" : "local plain-background cutout" };
-  } catch (e) {
-    if (e instanceof CutoutError && falConfigured()) return { png: await falCutout(source), via: cutoutModel() };
-    throw e;
+  };
+
+  const haveBirefnet = localCutoutAvailable();
+  if (mode === "local" && !haveBirefnet) throw new CutoutError("BiRefNet is not installed. Run: node scripts/get-birefnet.mjs lite");
+
+  // BiRefNet on this computer: free, private, works on any metal and on polished or dark engraved surfaces.
+  let bire: { png: Buffer; via: string } | null = null;
+  if ((mode === "local" || mode === "auto") && haveBirefnet) {
+    try {
+      const r = await birefnetCutout(source);
+      // Almost nothing kept, or almost everything kept: the model did not find the piece.
+      if (r.coverage >= 0.005 && r.coverage <= 0.92) bire = { png: r.png, via: r.via };
+    } catch (e) {
+      if (mode === "local") throw e instanceof CutoutError ? e : new CutoutError(e instanceof Error ? e.message : "The local cutout failed.");
+      // In auto mode the built-in method below still gets a go.
+    }
+    if (mode === "local") {
+      if (!bire) throw new CutoutError("The cutout could not find the piece in this photo. Try a plainer background.");
+      return bire;
+    }
   }
+
+  // The built-in colour method keeps the metal alone. When both exist, BiRefNet is used unless it kept far more than the
+  // metal (a display bust, a hand): then the jewellery alone is what is wanted. See cutoutChoice.ts for the measurements.
+  let gold: { png: Buffer; via: string } | null = null;
+  let goldError: unknown = null;
+  if (mode !== "local") {
+    try { gold = await builtIn(); } catch (e) { goldError = e; }
+  }
+  if (bire && gold) {
+    return pickCutout(await alphaShare(bire.png), await alphaShare(gold.png)) === "gold" ? gold : bire;
+  }
+  if (bire) return bire;
+  if (gold) return gold;
+  if (goldError instanceof CutoutError && mode !== "gold" && falConfigured()) return { png: await falCutout(source), via: cutoutModel() };
+  throw goldError;
 }
 
 /** An EMPTY backdrop picture (no jewellery in it), from whichever image provider is active. */

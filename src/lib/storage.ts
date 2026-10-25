@@ -2,14 +2,32 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import crypto from "node:crypto";
 import sharp from "sharp";
-import { DATA_DIR, addImage, nextSortOrder, type NewImage } from "./db";
+import { DATA_DIR, addImage, nextSortOrder, originalsMissingHash, setImageHash, type NewImage } from "./db";
 
 // resolve, not join: a relative EFJ_DATA_DIR would otherwise make every path check fail.
 export const UPLOAD_DIR = path.resolve(DATA_DIR, "uploads");
 export const MAX_PHOTOS = 20;
 export const MAX_PHOTO_BYTES = 25 * 1024 * 1024;
 
-/** Saves a full-size JPEG (max 2000px) and a 600px WebP thumbnail. Returns paths relative to UPLOAD_DIR. */
+const sha256Hex = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex");
+
+/** The full-size JPEG that is stored for an uploaded photo (max 2000px, upright). Deterministic for the same input. */
+const fullSizeJpeg = (buf: Buffer) =>
+  sharp(buf)
+    .rotate() // honour phone EXIF orientation
+    .resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 90 })
+    .toBuffer();
+
+/**
+ * A fingerprint of a photo: the SHA-256 of the exact bytes that would be stored for it. Uploading the same photo twice
+ * gives the same fingerprint, and so does a photo already in the catalog (its stored file is hashed the same way).
+ */
+export async function fingerprint(buf: Buffer): Promise<string> {
+  return sha256Hex(await fullSizeJpeg(buf));
+}
+
+/** Saves a full-size JPEG (max 2000px) and a 600px WebP thumbnail. Returns paths relative to UPLOAD_DIR and the file's SHA-256. */
 export async function saveImage(buf: Buffer, productId: number) {
   const dir = path.join(UPLOAD_DIR, String(productId));
   await fs.mkdir(dir, { recursive: true });
@@ -17,18 +35,25 @@ export async function saveImage(buf: Buffer, productId: number) {
   const file = `${productId}/${id}.jpg`;
   const thumb = `${productId}/${id}-t.webp`;
 
-  const base = sharp(buf).rotate(); // honour phone EXIF orientation
-  await base
-    .clone()
-    .resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: 90 })
-    .toFile(path.join(UPLOAD_DIR, file));
-  await base
-    .clone()
+  const jpg = await fullSizeJpeg(buf);
+  await fs.writeFile(path.join(UPLOAD_DIR, file), jpg);
+  await sharp(buf)
+    .rotate()
     .resize({ width: 600, height: 600, fit: "inside", withoutEnlargement: true })
     .webp({ quality: 80 })
     .toFile(path.join(UPLOAD_DIR, thumb));
-  return { file, thumb };
+  return { file, thumb, sha256: sha256Hex(jpg) };
+}
+
+/** Fills in the fingerprint of photos saved before duplicate detection existed. Cheap after the first run. */
+export async function ensureHashes(): Promise<void> {
+  for (const row of originalsMissingHash()) {
+    try {
+      setImageHash(row.id, sha256Hex(await fs.readFile(uploadPath(row.path))));
+    } catch {
+      // A missing file just stays without a fingerprint.
+    }
+  }
 }
 
 /**
@@ -71,9 +96,10 @@ export async function ingestFiles(productId: number, files: File[], o: NewImage 
   if (big) throw new Error(`${big.name || "a photo"} is larger than 25 MB`);
   let order = nextSortOrder(productId);
   const ids: number[] = [];
+  const isOriginal = !o.kind || o.kind === "original";
   for (const f of files) {
-    const { file, thumb } = await saveImage(Buffer.from(await f.arrayBuffer()), productId);
-    ids.push(addImage(productId, file, thumb, order++, o));
+    const { file, thumb, sha256 } = await saveImage(Buffer.from(await f.arrayBuffer()), productId);
+    ids.push(addImage(productId, file, thumb, order++, isOriginal ? { ...o, sha256 } : o));
   }
   return ids;
 }

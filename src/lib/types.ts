@@ -14,6 +14,10 @@ export const GENDERS = ["women", "men", "unisex"] as const;
 export const STATUSES = ["draft", "ready", "scheduled", "posted", "sold_out", "archived"] as const;
 export type Status = (typeof STATUSES)[number];
 
+/** Whether a piece that carries another brand's name or logo is genuine. "" means nobody has said yet. */
+export const AUTHENTICITY = ["", "genuine", "not_genuine"] as const;
+export type Authenticity = (typeof AUTHENTICITY)[number];
+
 export interface Product {
   id: number;
   sku: string;
@@ -47,6 +51,9 @@ export interface Product {
   hashtags: string[];
   alt_text: string;
   owner_questions: string[];
+  /** Brand names, logos, hallmarks and engraved text visible on the piece, copied exactly as photographed. */
+  marks_seen: string[];
+  authenticity: Authenticity;
   analysed_at: string | null;
   created_at: string;
   updated_at: string;

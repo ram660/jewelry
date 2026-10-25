@@ -101,6 +101,9 @@ function migrate(d: DatabaseSync) {
   addImg("fidelity_notes", "TEXT");
   addImg("source_image_id", "INTEGER");
   addImg("carousel_pos", "INTEGER");
+  // SHA-256 of the file as uploaded, to notice the same photo being added twice.
+  addImg("sha256", "TEXT");
+  d.exec("CREATE INDEX IF NOT EXISTS product_images_sha ON product_images(sha256)");
 
   // products columns added after initial release
   const prodCols = new Set(
@@ -114,9 +117,13 @@ function migrate(d: DatabaseSync) {
   addProd("hypoallergenic", "INTEGER");
   addProd("anti_tarnish", "INTEGER");
   addProd("name_suggestions", "TEXT NOT NULL DEFAULT '[]'");
+  // Brand names, logos and engraved text visible on the piece, copied exactly as photographed, and whether the owner
+  // says the piece is genuine. Empty means nobody has answered yet.
+  addProd("marks_seen", "TEXT NOT NULL DEFAULT '[]'");
+  addProd("authenticity", "TEXT NOT NULL DEFAULT ''");
 }
 
-const JSON_FIELDS = ["style_tags", "occasion_tags", "captions", "hashtags", "owner_questions", "name_suggestions"] as const;
+const JSON_FIELDS = ["style_tags", "occasion_tags", "captions", "hashtags", "owner_questions", "name_suggestions", "marks_seen"] as const;
 
 // Fields the editor may change. Everything else (id, sku, timestamps) is server-controlled.
 const EDITABLE = [
@@ -124,7 +131,7 @@ const EDITABLE = [
   "nickel_free", "hypoallergenic", "anti_tarnish", "colour_finish", "stones", "sizes",
   "weight_g", "price_cad", "cost_cad", "compare_at_cad", "low_stock_at",
   "stock_qty", "status", "style_tags", "occasion_tags", "name_suggestions", "short_desc", "long_desc",
-  "care_notes", "captions", "hashtags", "alt_text", "owner_questions",
+  "care_notes", "captions", "hashtags", "alt_text", "owner_questions", "marks_seen", "authenticity",
 ] as const;
 
 type Row = Record<string, unknown>;
@@ -257,6 +264,8 @@ export interface NewImage {
   fidelity_score?: number | null;
   fidelity_notes?: string | null;
   source_image_id?: number | null;
+  /** SHA-256 (hex) of the uploaded file. Only set for original photos. */
+  sha256?: string | null;
 }
 
 export function nextSortOrder(productId: number): number {
@@ -271,15 +280,68 @@ export function addImage(productId: number, p: string, thumb: string, order: num
     .prepare(
       `INSERT INTO product_images
          (product_id, kind, path, thumb_path, sort_order, approved, label, prompt_used, model_used,
-          fidelity_score, fidelity_notes, source_image_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          fidelity_score, fidelity_notes, source_image_id, sha256)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       productId, o.kind ?? "original", p, thumb, order, o.approved === false ? 0 : 1,
       o.label ?? null, o.prompt_used ?? null, o.model_used ?? null,
-      o.fidelity_score ?? null, o.fidelity_notes ?? null, o.source_image_id ?? null
+      o.fidelity_score ?? null, o.fidelity_notes ?? null, o.source_image_id ?? null, o.sha256 ?? null
     );
   return Number(res.lastInsertRowid);
+}
+
+export interface DuplicateHit {
+  sha256: string;
+  image_id: number;
+  product_id: number;
+  product_name: string;
+  sku: string;
+}
+
+/** Original photos already in the catalog whose bytes match one of these hashes. */
+export function findOriginalsByHash(hashes: string[]): DuplicateHit[] {
+  if (!hashes.length) return [];
+  const marks = hashes.map(() => "?").join(",");
+  const rows = db()
+    .prepare(
+      `SELECT i.sha256, i.id AS image_id, i.product_id, p.name AS product_name, p.sku
+         FROM product_images i JOIN products p ON p.id = i.product_id
+        WHERE i.kind = 'original' AND i.sha256 IN (${marks}) ORDER BY i.id`
+    )
+    .all(...hashes) as Row[];
+  return rows.map((r) => ({
+    sha256: String(r.sha256), image_id: Number(r.image_id), product_id: Number(r.product_id),
+    product_name: String(r.product_name ?? ""), sku: String(r.sku ?? ""),
+  }));
+}
+
+/** Original photos saved before duplicate detection existed: their hash is filled in on first use. */
+export function originalsMissingHash(): { id: number; path: string }[] {
+  return (db().prepare("SELECT id, path FROM product_images WHERE kind = 'original' AND sha256 IS NULL").all() as Row[]).map(
+    (r) => ({ id: Number(r.id), path: String(r.path) })
+  );
+}
+
+export function setImageHash(id: number, sha256: string) {
+  db().prepare("UPDATE product_images SET sha256 = ? WHERE id = ?").run(sha256, id);
+}
+
+/** Products that hold the very same photos: [[productIds that share at least one original photo], ...]. */
+export function duplicateProductGroups(): { product_ids: number[]; shared_photos: number }[] {
+  const rows = db()
+    .prepare("SELECT sha256, GROUP_CONCAT(DISTINCT product_id) AS ids FROM product_images WHERE kind = 'original' AND sha256 IS NOT NULL GROUP BY sha256 HAVING COUNT(DISTINCT product_id) > 1")
+    .all() as Row[];
+  // Merge photos that link the same products into one group.
+  const groups: { ids: Set<number>; photos: number }[] = [];
+  for (const r of rows) {
+    const ids = String(r.ids).split(",").map(Number);
+    const hit = groups.filter((g) => ids.some((i) => g.ids.has(i)));
+    const merged = { ids: new Set<number>(ids), photos: 1 };
+    for (const g of hit) { g.ids.forEach((i) => merged.ids.add(i)); merged.photos += g.photos; groups.splice(groups.indexOf(g), 1); }
+    groups.push(merged);
+  }
+  return groups.map((g) => ({ product_ids: [...g.ids].sort((a, b) => a - b), shared_photos: g.photos }));
 }
 
 export function getImage(id: number): ProductImage | null {

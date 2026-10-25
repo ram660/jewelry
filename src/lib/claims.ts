@@ -126,7 +126,27 @@ export function checkProduct(p: Product, imageCount: number): Problem[] {
   if (!p.name.trim()) block("Add a product name.");
   if (imageCount === 0) block("Add at least one photo.");
   if (p.price_cad == null || p.price_cad <= 0) block("Set a price.");
-  if (!/10\s?k/i.test(p.plating) || !/plated/i.test(p.plating)) block("Plating should read “10K gold-plated”.");
+  // A genuine branded piece is whatever it really is, so the owner's own plating wording is not forced.
+  if (p.authenticity !== "genuine" && !/plated/i.test(p.plating)) {
+    block("Say how it is plated, for example “10K gold-plated” (gold colour) or “rhodium-plated” (silver colour).");
+  }
+  if (/gold/i.test(p.plating) && /silver|white|rhodium|platinum|steel/i.test(p.colour_finish)) {
+    warn("The plating says gold but the colour or finish says silver or white. Check which is right.");
+  }
+
+  // Another brand's name or logo on the piece: the photos and the marks are never altered, but the owner must say what
+  // it is before it can be posted. Marks are recorded exactly as seen (by the AI or by the owner).
+  const marks = (p.marks_seen ?? []).filter(Boolean);
+  if (marks.length) {
+    const shown = marks.slice(0, 3).join(", ");
+    if (!p.authenticity) {
+      block(`This piece shows another brand's mark (${shown}). Say whether it is genuine under “Brand marks” before it can be posted.`);
+    } else if (p.authenticity === "not_genuine") {
+      block(`This piece carries another brand's mark (${shown}) and is not genuine, so it cannot be posted. Keep it for your records.`);
+    } else {
+      warn("Genuine brand piece: keep the receipt or certificate, and describe the metal and plating exactly as they are.");
+    }
+  }
 
   if (!p.analysed_at) warn("Run the AI analysis to get descriptions and captions.");
   if (p.captions.length === 0) warn("No captions yet.");

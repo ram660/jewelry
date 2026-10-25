@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { firstImages, listProducts } from "@/lib/db";
+import { duplicateProductGroups, firstImages, listProducts } from "@/lib/db";
+import { ensureHashes } from "@/lib/storage";
 import { imageUrl } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -10,8 +11,14 @@ export default async function Catalog({
   searchParams: Promise<{ q?: string; category?: string; status?: string }>;
 }) {
   const { q = "", category = "", status = "" } = await searchParams;
+  await ensureHashes(); // fingerprints for photos saved before duplicate detection existed (quick after the first time)
   const thumbs = firstImages();
   const all = listProducts();
+  const dupGroups = duplicateProductGroups();
+  const nameOf = (id: number) => {
+    const p = all.find((x) => x.id === id);
+    return p ? `${p.name || p.sku}` : `#${id}`;
+  };
   const products = all.filter(
     (p) =>
       (!category || p.category === category) &&
@@ -29,6 +36,25 @@ export default async function Catalog({
         {all.length > 0 && <a href="/api/export" className="btn ghost">⬇ Export CSV</a>}
         <Link href="/upload" className="btn">+ Add product</Link>
       </div>
+
+      {dupGroups.length > 0 && (
+        <div className="notice">
+          <b>Some products hold the same photos.</b> Keep one of each group and delete the extras on their product pages.
+          <ul className="q">
+            {dupGroups.map((g) => (
+              <li key={g.product_ids.join("-")}>
+                {g.product_ids.map((id, i) => (
+                  <span key={id}>
+                    {i > 0 && " · "}
+                    <Link href={`/products/${id}`}>#{id} {nameOf(id)}</Link>
+                  </span>
+                ))}{" "}
+                <span className="muted">({g.shared_photos} shared photo{g.shared_photos === 1 ? "" : "s"})</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <p className="muted">
         {all.length} products · {all.reduce((s, p) => s + p.stock_qty, 0)} pieces in stock · cost value $

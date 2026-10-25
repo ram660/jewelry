@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CATEGORIES, GENDERS, STATUSES } from "./types";
+import { AUTHENTICITY, CATEGORIES, GENDERS, STATUSES } from "./types";
 
 /**
  * What PATCH /api/products/[id] accepts. Forms send numbers as text, so "12.50" is fine, "" or null clears the
@@ -57,6 +57,8 @@ export const ProductPatch = z.object({
   hashtags: list(60),
   alt_text: text(500),
   owner_questions: list(300),
+  marks_seen: list(160),
+  authenticity: z.enum(AUTHENTICITY, { error: "Authenticity must be empty, genuine or not_genuine." }),
   mark_analysed: z.boolean().optional(),
 }).partial();
 

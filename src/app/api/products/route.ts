@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createProduct, deleteProduct, listProducts } from "@/lib/db";
 import { MAX_PHOTOS, ingestFiles, removeProductDir } from "@/lib/storage";
 import { CATEGORIES } from "@/lib/types";
+import { describeDuplicates, findDuplicateUploads } from "@/lib/duplicates";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Add at least one photo." }, { status: 400 });
   }
   if (files.length > MAX_PHOTOS) return NextResponse.json({ error: `Add at most ${MAX_PHOTOS} photos at a time.` }, { status: 400 });
+
+  // Stop the same photos being added again (a retried upload used to create a second product). "Upload anyway" skips this.
+  if (form.get("allowDuplicates") !== "1") {
+    const dup = await findDuplicateUploads(files);
+    if (dup.existing.length || dup.repeated.length) {
+      return NextResponse.json({ error: describeDuplicates(dup), code: "duplicate_photos", ...dup }, { status: 409 });
+    }
+  }
 
   const product = createProduct(name, category);
   try {

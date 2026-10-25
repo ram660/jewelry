@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CATEGORIES, GENDERS, STATUSES, imageUrl, type Product, type ProductImage } from "@/lib/types";
@@ -14,9 +14,15 @@ const unCsv = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
 const IG_CAP = 2200;
 
 export default function ProductEditor({
-  initial, images, movements, demoMode, nameSuggestions,
-}: { initial: Product; images: ProductImage[]; movements: Movement[]; demoMode: boolean; nameSuggestions?: string[] }) {
+  initial, images, movements, demoMode, nameSuggestions, topSlot,
+}: {
+  initial: Product; images: ProductImage[]; movements: Movement[]; demoMode: boolean; nameSuggestions?: string[];
+  /** Sections shown above the details: the rendered images and the Gemini prompt. */
+  topSlot?: ReactNode;
+}) {
   const router = useRouter();
+  const [markInput, setMarkInput] = useState("");
+  const [showMarks, setShowMarks] = useState(false);
   const [p, setP] = useState<Product>(initial);
   const [saved, setSaved] = useState<Product>(initial);
   const [msg, setMsg] = useState("");
@@ -151,8 +157,10 @@ export default function ProductEditor({
     <>
       <div className="toolbar">
         <h1 className="grow">{p.name || "(unnamed)"} <span className="muted" style={{ fontSize: "1rem" }}>{p.sku}</span></h1>
-        <Link href={`/products/${p.id}/studio`} className="btn ghost">🎨 Visual Studio{generated ? ` (${generated})` : ""}</Link>
-        <button className="btn ghost" onClick={analyse} disabled={!!busy}>{p.analysed_at ? "↻ Re-run AI" : "✦ Run AI analysis"}</button>
+        <Link href={`/products/${p.id}/studio`} className="btn ghost">🎨 More studio tools{generated ? ` (${generated})` : ""}</Link>
+        <button className="btn ghost" onClick={analyse} disabled={!!busy} title="Sends your photos to the AI and fills in the description, captions and tags">
+          {p.analysed_at ? "↻ Re-write with AI" : "✨ Write description with AI"}
+        </button>
         <button className="btn" onClick={save} disabled={!!busy || !dirty}>{dirty ? "Save changes" : "Saved"}</button>
       </div>
       {demoMode && (
@@ -165,6 +173,8 @@ export default function ProductEditor({
       {msg && <p style={{ color: "var(--ok)" }}>{msg}</p>}
       {err && <p className="error">{err}</p>}
       {problems.length > 0 && <ul className="error">{problems.map((x, i) => <li key={i}>{x}</li>)}</ul>}
+
+      {topSlot}
 
       <div className="split">
         <div>
@@ -279,6 +289,55 @@ export default function ProductEditor({
               <div><label>Stones</label><input value={p.stones} onChange={(e) => set("stones", e.target.value)} /></div>
             </div>
           </div>
+
+          {(p.marks_seen.length > 0 || showMarks) ? (
+            <div className="card pad">
+              <h2>Brand marks on this piece</h2>
+              <p className="muted" style={{ marginTop: 0, fontSize: ".85rem" }}>
+                Names, logos and engraved text that are on the piece, written exactly as they appear. Your photos and rendered
+                images never change them. The AI also fills this in when you press the AI button.
+              </p>
+              <div className="chips" style={{ marginBottom: ".5rem" }}>
+                {p.marks_seen.map((m, i) => (
+                  <span key={i} className="chip on">
+                    {m}
+                    <button type="button" aria-label={`Remove ${m}`} style={{ border: 0, background: "transparent", cursor: "pointer" }}
+                      onClick={() => set("marks_seen", p.marks_seen.filter((_, j) => j !== i))}>×</button>
+                  </span>
+                ))}
+                {p.marks_seen.length === 0 && <span className="muted">None recorded.</span>}
+              </div>
+              <div className="row">
+                <input value={markInput} maxLength={160} placeholder="Type a mark exactly as it appears, then press Add"
+                  style={{ flex: 1, minWidth: 220 }}
+                  onChange={(e) => setMarkInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && markInput.trim()) { e.preventDefault(); set("marks_seen", [...p.marks_seen, markInput.trim()]); setMarkInput(""); } }} />
+                <button type="button" className="btn small ghost" disabled={!markInput.trim()}
+                  onClick={() => { set("marks_seen", [...p.marks_seen, markInput.trim()]); setMarkInput(""); }}>Add</button>
+              </div>
+              {p.marks_seen.length > 0 && (
+                <div style={{ marginTop: ".7rem" }}>
+                  <label>Is this piece genuine?</label>
+                  <select value={p.authenticity} onChange={(e) => set("authenticity", e.target.value as Product["authenticity"])}>
+                    <option value="">Not answered yet</option>
+                    <option value="genuine">Yes, it is genuine and I have proof (receipt or certificate)</option>
+                    <option value="not_genuine">No, it is not made by that brand</option>
+                  </select>
+                  <p className="muted" style={{ fontSize: ".82rem", marginBottom: 0 }}>
+                    {p.authenticity === "not_genuine"
+                      ? "A piece with another brand's mark that is not genuine cannot be posted. Rendering and downloading your pictures still work."
+                      : p.authenticity === "genuine"
+                      ? "Keep the proof. Describe the metal and plating exactly as they are, since they may differ from your usual pieces."
+                      : "Posting stays blocked until this is answered."}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button type="button" className="btn small ghost" style={{ marginBottom: "1rem" }} onClick={() => setShowMarks(true)}>
+              + This piece shows a brand name or logo
+            </button>
+          )}
 
           <div className="card pad">
             <h2>Price &amp; facts</h2>

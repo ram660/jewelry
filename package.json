@@ -3,14 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -H 127.0.0.1",
     "build": "next build",
-    "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "start": "next start -H 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --no-warnings scripts/workflow.test.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",
     "next": "^15.5.0",
+    "onnxruntime-node": "^1.30.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "sharp": "^0.35.5",

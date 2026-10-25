@@ -87,6 +87,18 @@ export const cutoutVariant = () => process.env.FAL_CUTOUT_VARIANT || "General Us
 export const cutoutResolution = () => process.env.FAL_CUTOUT_RESOLUTION || "2048x2048";
 export const backdropModel = () => process.env.FAL_BACKDROP_MODEL || "fal-ai/flux/schnell";
 
+/**
+ * How the jewellery is cut out of a photo (always from your own pixels, never redrawn):
+ *   auto  BiRefNet on this computer when it has been installed (node scripts/get-birefnet.mjs lite), otherwise the
+ *         built-in gold-colour method; fal.ai's BiRefNet when fal is the image provider or nothing local can find the piece
+ *   local BiRefNet on this computer only      gold  the built-in gold-colour method only      fal  fal.ai only
+ */
+export type CutoutMode = "auto" | "local" | "gold" | "fal";
+export const cutoutMode = (): CutoutMode => {
+  const v = env("CUTOUT_MODE", "auto");
+  return v === "local" || v === "gold" || v === "fal" ? v : "auto";
+};
+
 // DeepInfra: reads photos
 export const visionModel = () => process.env.DEEPINFRA_VISION_MODEL || "Qwen/Qwen3-VL-30B-A3B-Instruct";
 

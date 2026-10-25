@@ -124,3 +124,13 @@ real photos and gets a match score (red under `FIDELITY_MIN`, default 75). Only 
 | `src/lib/db.ts` | Database schema and queries |
 
 `data/` and `.env.local` are git-ignored. Back up `data/` regularly: it is your catalog.
+
+## Workflow (upload, render, optional AI, Gemini prompt)
+
+1. **Upload** photos. No AI runs. Duplicate photos are caught and you choose to skip or upload anyway.
+2. **Rendered images**: four studio looks per photo, made from your real photo (BiRefNet or gold-colour cutout, picked per photo). Download one by one or as a ZIP.
+3. **Write description with AI** (button on the product): fills description, tags and the brand marks seen on the piece.
+4. **Gemini prompt**: pick a style, copy the prompt, download your photos, paste both into Gemini.
+5. **Brand marks gate**: if a piece shows another brand's name or logo, say whether it is genuine before it can be marked Ready or posted. Marks are never removed from photos or text.
+
+Run with `npm run dev` (binds 127.0.0.1 only). Tests: `npm test`.

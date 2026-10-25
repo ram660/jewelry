@@ -26,6 +26,7 @@ const Analysis = z.object({
   hashtags: strList,
   alt_text: z.string().catch(""),
   owner_questions: strList,
+  marks_seen: strList,
 });
 export type AnalysisResult = z.infer<typeof Analysis>;
 
@@ -42,6 +43,7 @@ function buildPrompt(p: Product, brand: string): string {
     `Owner's product name: ${p.name || "(none given)"}`,
     p.base_metal && `Base metal (owner confirmed): ${p.base_metal}`,
     p.sizes && `Sizes (owner confirmed): ${p.sizes}`,
+    p.plating && `Plating (owner's note): ${p.plating}`,
     p.price_cad != null && `Price: $${p.price_cad} CAD`,
   ]
     .filter(Boolean)
@@ -57,8 +59,10 @@ KNOWN FACTS:
 ${known}
 
 HARD RULES
-- The piece is 10K gold-PLATED. Never write "10K gold", "solid gold", "real gold", "waterproof", "tarnish-free", "lasts forever" or "hypoallergenic".
+- Plating: if the owner's plating note says 10K gold-plated AND the metal in the photos looks gold, call it "10K gold-plated". If the metal looks silver, white or rose, do NOT call it gold: describe the colour you see and ask the owner what the plating is in "owner_questions". Never write "10K gold" (without "plated"), "solid gold", "real gold", "waterproof", "tarnish-free", "lasts forever" or "hypoallergenic".
 - Describe only what is visible in the photos. Do not invent stones, sizes, weight, base metal or nickel-free status.
+- Marks on the piece: list every brand name, logo, monogram, hallmark or engraved word you can read on the piece, its stand or a tag in "marks_seen", copied exactly as it appears (keep the spelling and capitals; use an empty list if there are none). Never leave out or change a mark you can see.
+- If "marks_seen" is not empty: describe the design neutrally (shape, finish, stones). Do not use another brand's name as a selling point in the name, descriptions, captions or hashtags, do not say the piece is authentic, genuine, original, a replica, a dupe or "inspired by" anyone, and do not guess where it was made. The owner decides that.
 - Anything a photo cannot show (base metal, size/length, weight, nickel-free, plating thickness) goes in "owner_questions" as short questions for the owner, unless it is already listed under KNOWN FACTS.
 - Canadian spelling (jewellery, colour). No more than 2 emojis per caption, chosen from: ✨ 💛 🤍 🎁 📦 🌿.
 - Do not put a price in captions unless one is given under KNOWN FACTS.
@@ -74,12 +78,13 @@ Reply with ONLY a JSON object with exactly these keys:
   "style_tags": [3-6 lowercase tags],
   "occasion_tags": [2-5 lowercase tags],
   "short_desc": "one sentence, max 20 words",
-  "long_desc": "2-4 sentences for a product page, mentions 10K gold-plated",
+  "long_desc": "2-4 sentences for a product page; mention the plating only when the rules above allow it",
   "care_notes": "2-3 short sentences",
   "captions": [3 different Instagram captions following the caption formula in the brand guide, WITHOUT hashtags],
   "hashtags": [10-14 hashtags including the local and brand pools, each starting with #],
   "alt_text": "one sentence describing the photo for accessibility",
-  "owner_questions": [questions for the owner]
+  "owner_questions": [questions for the owner],
+  "marks_seen": [every brand name, logo, hallmark or engraved text visible on the piece, copied exactly; empty list if none]
 }`;
 }
 
@@ -128,6 +133,8 @@ function demoAnalysis(p: Product): AnalysisResult {
       "What sizes or lengths is it available in?",
       "Is it nickel-free?",
     ],
+    // Without AI nothing can be read from the photo, so any marks the owner already recorded are kept as they are.
+    marks_seen: p.marks_seen,
   };
 }
 
@@ -150,5 +157,21 @@ export function analysisToPatch(a: AnalysisResult, p: Product): Record<string, u
     hashtags: a.hashtags,
     alt_text: a.alt_text,
     owner_questions: a.owner_questions,
+    // Marks the owner or an earlier run recorded are never dropped: new ones are added, exactly as read.
+    marks_seen: mergeMarks(p.marks_seen, a.marks_seen),
   };
+}
+
+/** Same mark, different spacing or capitals ("TIFFANY & Co." and "TIFFANY&Co."): keep the first one written. */
+export function mergeMarks(existing: string[], found: string[]): string[] {
+  const key = (m: string) => m.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const m of [...existing, ...found].map((x) => x.trim()).filter(Boolean)) {
+    const k = key(m);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(m);
+  }
+  return out;
 }
