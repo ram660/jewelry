@@ -5,11 +5,13 @@ import {
   activeImageModel, backdropModel, cutoutMode, cutoutModel, cutoutResolution, cutoutVariant, editModel, falConfigured,
   imageProvider, visionProvider,
 } from "./config";
-import { localCutout as birefnetCutout, localCutoutAvailable } from "./localCutout";
+// In its own process, so running out of memory can never take the Studio down.
+import { isolatedCutout as birefnetCutout, localCutoutAvailable } from "./localCutout";
 import { alphaShare, pickCutout } from "./cutoutChoice";
 import { CANVAS, compositeProduct, creamBackdrop } from "./composite";
 import { CutoutError, localCutout } from "./cutout";
 import { drawnBackdrop } from "./backdrops";
+import { describeTone, gemMedianLab, maskedMedianLab } from "./colourMatch";
 import { falDownload, falRun, type FalImages } from "./providers/fal";
 import { geminiImage } from "./providers/gemini";
 import { askVision } from "./providers/vision";
@@ -41,7 +43,7 @@ const SIZE = { width: 1024, height: 1280 };
 
 // ---------------------------------------------------------------- prompts
 
-const FIDELITY_RULES = `CRITICAL: the reference photos show ONE real piece of jewellery. Reproduce that exact piece: same overall shape, the same number, size and placement of stones, the same chain-link pattern, clasp, thickness, finish and gold tone. Do not add, remove, simplify or redesign anything on the jewellery. Keep it in sharp focus and clearly the hero of the image.
+const FIDELITY_RULES = `CRITICAL: the reference photos show ONE real piece of jewellery. Reproduce that exact piece: same overall shape, the same number, size and placement of stones, the same chain-link pattern, clasp, thickness, finish and gold tone, and the exact colour of every stone, pearl, bead and enamel detail. Do not add, remove, simplify or redesign anything on the jewellery. Keep it in sharp focus and clearly the hero of the image.
 Style: photorealistic, premium e-commerce / Instagram photography, soft natural light, elegant and uncluttered, portrait 4:5. No text, no watermark, no logo, no extra jewellery.`;
 
 const NEGATIVE = "text, watermark, logo, extra jewellery, extra rings, deformed, distorted, blurry, low quality, cartoon";
@@ -258,25 +260,64 @@ async function storeCutout(p: Product, png: Buffer, via: string, sourceId: numbe
 // ---------------------------------------------------------------- fidelity check
 
 const Fidelity = z.object({
-  score: z.number().min(0).max(100).catch(0),
+  score: z.number().min(0).max(100),
   issues: z.array(z.string()).catch([]),
+  /** Any text, letters, logo or brand mark anywhere in the generated picture. Only its presence is kept, never the text. */
+  marks: z.boolean(),
 });
 
+export interface FidelityResult {
+  /** Null when the check could not run. */
+  score: number | null;
+  notes: string;
+  marks: boolean;
+}
+
 /** Asks a vision model to compare the real photos with the generated one and score how faithfully the piece was kept. */
-async function fidelityCheck(originals: Buffer[], generated: Buffer) {
+export async function fidelityCheck(originals: Buffer[], generated: Buffer): Promise<FidelityResult> {
   if (!visionProvider()) {
-    return { score: null, notes: "Add an AI key to get an automatic match score. Compare with your original by eye." };
+    return { score: null, notes: "Add an AI key to get an automatic match score. Compare with your original by eye.", marks: false };
   }
   const prompt = `The first ${originals.length} image(s) are REAL photos of one piece of jewellery. The last image is an AI-generated picture that should show the SAME piece.
-Compare only the jewellery itself (ignore background, hands, lighting). Check: overall shape, number and placement of stones, chain/link pattern, clasp or band style, thickness, colour and gold tone, and that nothing was added or removed.
-Reply with ONLY JSON: {"score": 0-100 (100 = identical piece), "issues": ["short, specific differences; empty if none"]}`;
+Compare only the jewellery itself (ignore background, hands, lighting). Check: overall shape, number and placement of stones, chain/link pattern, clasp or band style, thickness, colour and gold tone, the colour of every stone, pearl or bead, and that nothing was added or removed.
+Also look at the WHOLE generated picture: set "marks" to true if it shows any text, letters, numbers, logo, monogram, brand mark, signature or watermark anywhere (on the piece, the background or a prop).
+Reply with ONLY JSON: {"score": 0-100 (100 = identical piece), "issues": ["short, specific differences; empty if none"], "marks": true | false}`;
   try {
     const photos = await Promise.all([...originals, generated].map((b) => toModelJpeg(b, 1024)));
     const parsed = Fidelity.parse(parseJsonLoose(await askVision(prompt, photos, { temperature: 0, maxTokens: 1500 })));
-    return { score: Math.round(parsed.score), notes: parsed.issues.join("; ") || "No differences found." };
+    return { score: Math.round(parsed.score), notes: parsed.issues.join("; ") || "No differences found.", marks: parsed.marks };
   } catch (e) {
     const why = e instanceof Error ? e.message.slice(0, 140) : "unknown error";
-    return { score: null, notes: `The automatic check could not run (${why}). Compare with your original by eye.` };
+    return { score: null, notes: `The automatic check could not run (${why}). Compare with your original by eye.`, marks: false };
+  }
+}
+
+/** Typical colour of a cut-out's visible pixels. Small is enough for a median and keeps it quick. */
+async function cutoutTone(png: Buffer) {
+  const { data } = await sharp(png).ensureAlpha().resize(256, 256, { fit: "inside" }).raw().toBuffer({ resolveWithObject: true });
+  return { piece: maskedMedianLab(data), stones: gemMedianLab(data) };
+}
+
+/**
+ * Compares the piece's tone in the real photo and in an AI scene, measured on this computer. Advisory only: it never
+ * changes the match score. Null when the local cutout model is not installed or the piece cannot be found.
+ * Not for on-model shots: their cut-out would include the hand or neck.
+ */
+async function colourCheck(images: ProductImage[], src: ProductImage, photo: Buffer, generated: Buffer): Promise<string | null> {
+  if (!localCutoutAvailable()) return null;
+  try {
+    const saved = images.find((i) => i.kind === "cutout" && i.source_image_id === src.id && isLocalCut(i.model_used ?? ""));
+    const refPng = saved ? await fs.readFile(uploadPath(saved.path)) : (await birefnetCutout(photo)).png;
+    const gen = await birefnetCutout(generated);
+    if (gen.coverage < 0.005 || gen.coverage > 0.9) return null;
+    const [a, b] = await Promise.all([cutoutTone(refPng), cutoutTone(gen.png)]);
+    const notes: string[] = [];
+    if (a.piece && b.piece) notes.push(describeTone(a.piece, b.piece));
+    if (a.stones && b.stones) notes.push(describeTone(a.stones, b.stones, "stones"));
+    else if (a.stones) notes.push("Stone colour check: the coloured stones in your photo could not be found in this picture. Check they are all there.");
+    return notes.join(" ") || null;
+  } catch {
+    return null;
   }
 }
 
@@ -393,6 +434,10 @@ export async function makeVisual(p: Product, images: ProductImage[], req: Visual
     buf = await generateEdit(prompt, refs);
     model = activeImageModel();
     fidelity = await fidelityCheck(refs, buf);
+    if (req.kind === "scene") {
+      const tone = await colourCheck(images, refImages[0], refs[0], buf);
+      if (tone) fidelity.notes = fidelity.notes ? `${fidelity.notes} ${tone}` : tone;
+    }
   }
 
   const saved = await saveImage(buf, p.id);

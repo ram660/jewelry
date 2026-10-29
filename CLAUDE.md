@@ -32,7 +32,9 @@ SQLite via `src/lib/db.ts`, `sharp` for images. Roadmap: `docs/PLAN.md`. Brand v
 ## Harness (see docs/HARNESS.md)
 - Hooks (`.claude/hooks/`): `guard.mjs` blocks secrets and destructive commands; `typecheck.mjs` runs on Stop.
 - Subagents (`.claude/agents/`): `claims-auditor`, `brand-copy-reviewer`, `provider-scout`, `code-reviewer`.
-- Skills (`.claude/skills/`): `catalog-photos`, `check-images`, `verify`.
+- Skills (`.claude/skills/`): `catalog-photos`, `check-images`, `instagram-kit`, `verify`.
+- New product photos to post on Instagram: use `/instagram-kit` (`npm run insta`). Pieces with a mark stamped on the
+  jewellery are left out and called only "skipped"; brand names in the background are cropped away; no brand names anywhere.
 - Delegate wide reads and audits to subagents; keep the main thread for edits.
 
 ## Working style

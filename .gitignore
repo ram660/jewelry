@@ -7,6 +7,13 @@ next-env.d.ts
 .env
 .env.local
 .env.*.local
+.env.*
+!.env.example
+
+# new photos waiting to be made into kits, cutout models and videos
+/incoming/
+*.onnx
+*.mp4
 
 # local database + uploaded photos (only the top-level folder; a leading slash keeps code folders such as src/app/inbox/ tracked)
 /data/
@@ -18,3 +25,15 @@ next-env.d.ts
 # the relay's local queue, and any cutout test output
 /relay-data/
 /cutout-test/
+
+# Instagram kits: your product photos and their renders
+/instagram/
+
+# Reel music: the owner's own tracks, not committed
+/audio/*
+!/audio/README.md
+!/audio/*licence.txt
+
+# Build and run logs
+/logs/
+/.next-check/

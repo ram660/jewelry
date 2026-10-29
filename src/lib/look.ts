@@ -3,6 +3,7 @@ import type { OverlayOptions, Sharp } from "sharp";
 import { FORMATS, type FormatId } from "./posters";
 import { withLogo } from "./brand";
 import { LOOKS, type LookId } from "./looks";
+import { gemWeight, labToSrgb, srgbToLab, type Lab } from "./colourMatch";
 
 export { LOOKS, isLook, type LookId } from "./looks";
 
@@ -70,6 +71,7 @@ async function oneChannel(img: Sharp, N: number): Promise<Buffer> {
 /**
  * The jewellery retouch, on a transparent cut-out (alpha is kept): white balance, gentle levels and curve, clarity
  * (local contrast on lightness only), gold vibrance, sharpening, and a soft sparkle on the brightest highlights.
+ * Coloured stones get the lightness changes only, so a red pearl stays the red it was in the photo.
  */
 export async function jewelleryLook(cutPng: Buffer, gains: [number, number, number]): Promise<Buffer> {
   const { data: rgba, info } = await sharp(cutPng).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -77,6 +79,16 @@ export async function jewelleryLook(cutPng: Buffer, gains: [number, number, numb
   const rgb = Buffer.alloc(N * 3), alpha = Buffer.alloc(N);
   for (let p = 0; p < N; p++) {
     rgb[p * 3] = rgba[p * 4]; rgb[p * 3 + 1] = rgba[p * 4 + 1]; rgb[p * 3 + 2] = rgba[p * 4 + 2]; alpha[p] = rgba[p * 4 + 3];
+  }
+
+  // Coloured stones, pearls and enamel keep their own colour (white balance only); the retouch below is tuned for gold.
+  const gem = new Float32Array(N);
+  const gemLab: Lab[] = new Array(N);
+  for (let p = 0; p < N; p++) {
+    if (alpha[p] < 8) continue;
+    const c = srgbToLab(clamp(rgb[p * 3] * gains[0]), clamp(rgb[p * 3 + 1] * gains[1]), clamp(rgb[p * 3 + 2] * gains[2]));
+    const w = gemWeight(c);
+    if (w > 0) { gem[p] = w; gemLab[p] = c; }
   }
 
   const { lo, hi } = levelPoints(rgb, gains, alpha);
@@ -96,6 +108,15 @@ export async function jewelleryLook(cutPng: Buffer, gains: [number, number, numb
       const y = 0.2126 * R + 0.7152 * G + 0.0722 * B, k = 1.14;
       rgb[i] = clamp(Math.round(y + (R - y) * k)); rgb[i + 1] = clamp(Math.round(y + (G - y) * k)); rgb[i + 2] = clamp(Math.round(y + (B - y) * k));
     }
+  }
+
+  // Lightness from the retouch (contrast, clarity), colour from the photo.
+  for (let p = 0; p < N; p++) {
+    const w = gem[p];
+    if (!w) continue;
+    const now = srgbToLab(rgb[p * 3], rgb[p * 3 + 1], rgb[p * 3 + 2]), was = gemLab[p];
+    const [R, G, B] = labToSrgb({ L: now.L, a: now.a + (was.a - now.a) * w, b: now.b + (was.b - now.b) * w });
+    rgb[p * 3] = R; rgb[p * 3 + 1] = G; rgb[p * 3 + 2] = B;
   }
 
   const sharp1 = await sharp(rgb, { raw: { width: w, height: h, channels: 3 } }).sharpen({ sigma: 1.1, m1: 0.6, m2: 3 }).raw().toBuffer();

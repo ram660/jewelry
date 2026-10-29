@@ -112,3 +112,30 @@ RELAY_PULL_TOKEN=<another long random string, at least 24 characters>
 node relay/server.ts
 ```
 Use HTTPS in front of it (Meta requires it). Any host that gives you a certificate works. Never reuse the two tokens, and keep them out of git.
+
+## Publishing a post (`npm run ig:publish`)
+
+Publishes a finished kit from `npm run insta` (`instagram/<product>/`) to the shop's account. Needs `IG_ACCESS_TOKEN` and
+`IG_USER_ID` in `.env.local`, the Studio running (`npm run dev`), and `cloudflared` installed (`winget install Cloudflare.cloudflared`).
+
+```
+npm run ig:publish -- clover-set                 # dry run: shows the images, caption, hashtags, alt text and Story. Sends nothing.
+npm run ig:publish -- clover-set --caption 2     # use the second caption in the post notes (default: the first)
+npm run ig:publish -- clover-set --confirm       # publish it
+npm run ig:publish -- --tunnel-test clover-set   # check the tunnel can serve an image to the internet. Posts nothing.
+```
+Other options: `--single` (main photo only instead of a carousel of main + close-up), `--no-story`, `--story-only`, `--again`.
+
+- **What is posted.** A carousel of the 4:5 main image and the 4:5 close-up, with the chosen caption plus the hashtags and the
+  alt text for each slide, then the Story image as a Story. The square image is for Facebook and WhatsApp, not this post.
+- **Nothing goes out with blanks or banned wording.** Any `[BRACKET]` left in the caption, hashtags or alt text, or anything
+  `claims.ts` flags, stops the script. The Studio's publish route checks again.
+- **How Instagram gets the images.** Instagram downloads each photo from a public https address. For one publish only, the script
+  copies the JPEGs to a temp folder under random names, serves just those files from a tiny server on 127.0.0.1 (GET of those exact
+  names, nothing else), and opens a Cloudflare quick tunnel to that server alone. The Studio is never exposed. Tunnel, server and
+  temp folder are removed afterwards, also after an error or Ctrl+C. Your PC must stay on until the script finishes.
+- **Never posted twice by accident.** Each result is saved in `instagram/<product>/<product>_published.json` with the media id and
+  link. A kit that is already there is refused unless you add `--again`. If Instagram gives no clear answer to the final publish
+  step, it is not retried: it is saved as `check-instagram`, so look at the account before trying again.
+- **The token** stays in the Studio (`src/lib/providers/instagram.ts`), in a header. The script holds no keys.
+- To check the token: open http://127.0.0.1:3000/api/inbox/instagram-check (read-only: account name and posting quota).

@@ -7,8 +7,10 @@
     "build": "next build",
     "start": "next start -H 127.0.0.1",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --no-warnings scripts/claims.test.mts scripts/patch.test.mts scripts/workflow.test.mts scripts/relay.test.mts scripts/ella.test.mts scripts/guard.test.mts scripts/guardrequest.test.mts scripts/openrouter.test.mts scripts/gemini.test.mts scripts/backdrops.test.mts scripts/config.test.mts scripts/reviewChecklist.test.mts",
+    "test": "node --test --no-warnings scripts/claims.test.mts scripts/patch.test.mts scripts/workflow.test.mts scripts/relay.test.mts scripts/ella.test.mts scripts/guard.test.mts scripts/guardrequest.test.mts scripts/openrouter.test.mts scripts/gemini.test.mts scripts/backdrops.test.mts scripts/config.test.mts scripts/reviewChecklist.test.mts scripts/colourMatch.test.mts scripts/look.test.mts scripts/instagram.test.mts scripts/ig-publish.test.mts scripts/kitDraft.test.mts scripts/aiPost.test.mts scripts/cutout-isolated.test.mts scripts/claudeStyle.test.mts scripts/recommendations.test.mts scripts/reelRecipes.test.mts scripts/aiScene.test.mts",
     "cutout:test": "node --no-warnings scripts/cutout-local.mts",
+    "insta": "node --no-warnings scripts/instagram-kit.mts",
+    "ig:publish": "node --no-warnings scripts/ig-publish.mts",
     "relay": "node relay/server.ts"
   },
   "dependencies": {

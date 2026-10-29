@@ -22,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Link href="/" className="brand">✦ Elegant Fashion Jewellery · Studio</Link>
           <Link href="/" className="nav">Catalog</Link>
           <Link href="/upload" className="nav">Upload</Link>
+          <Link href="/instagram" className="nav">Instagram</Link>
           <Link href="/inbox" className="nav">Inbox{open > 0 && <span className="count">{open}</span>}</Link>
           <Link href="/settings" className="nav">Settings</Link>
         </header>

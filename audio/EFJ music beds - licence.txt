@@ -1,0 +1,12 @@
+EFJ Studio music beds
+=====================
+
+Soft glow.mp3          warm, slow pad chords with a soft bell
+Sparkle.mp3            light bell plucks over a quiet pad
+Sunday morning.mp3     gentle piano-like chords, 80 bpm
+Evening shimmer.mp3    slow, airy arpeggio with a long reverb
+
+These tracks were generated for Elegant Fashion Jewellery by scripts/make-music-beds.mjs on 2026-10-28.
+They are synthesised from plain tones by code: no samples, recordings or anyone else's music are used.
+The shop is free to use them in any post, Reel or Story, for any purpose. No credit needed.
+Remake them any time with: node scripts/make-music-beds.mjs

@@ -77,6 +77,57 @@ export interface LocalCutoutResult {
   ms: number;
 }
 
+/** The model needs about 5 GB of free memory for one cutout (its input is a fixed 1024x1024, whatever the photo's size). */
+export const OUT_OF_MEMORY =
+  "Not enough free memory for the cutout: it needs about 5 GB free. Close other programs (browser tabs, editors) and try again.";
+
+/**
+ * The same cutout, run in its own short-lived process (scripts/cutout-one.mts). If the model runs out of memory, only that
+ * process dies; the Studio keeps running and gets a clear error. All memory is given back after each photo. One retry
+ * after a pause, because memory often frees up. Server-only.
+ */
+export function isolatedCutout(input: Buffer): Promise<LocalCutoutResult> {
+  if (!localModelPath()) throw new LocalCutoutError("No local cutout model is installed. Run: node scripts/get-birefnet.mjs lite");
+  return inQueue(async () => {
+    const { spawn } = await import("node:child_process");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "efj-cutout-"));
+    const inFile = path.join(dir, "in.img"), outFile = path.join(dir, "out.png");
+    fs.writeFileSync(inFile, input);
+    const once = () =>
+      new Promise<LocalCutoutResult>((resolve, reject) => {
+        const p = spawn(process.execPath, ["--no-warnings", path.join(process.cwd(), "scripts", "cutout-one.mts"), inFile, outFile], {
+          cwd: process.cwd(), env: process.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true,
+        });
+        let out = "", err = "";
+        p.stdout!.on("data", (d) => (out += d));
+        p.stderr!.on("data", (d) => (err += d));
+        const timer = setTimeout(() => p.kill(), 5 * 60_000);
+        p.once("error", (e) => (clearTimeout(timer), reject(new LocalCutoutError(`The cutout could not start (${e.message}).`))));
+        p.once("exit", (code) => {
+          clearTimeout(timer);
+          if (code === 0 && fs.existsSync(outFile)) {
+            const meta = JSON.parse(out.trim().split("\n").pop() || "{}");
+            return resolve({ png: fs.readFileSync(outFile), coverage: meta.coverage, via: meta.via, ms: meta.ms });
+          }
+          // Exit 3, a crash with no code, or the allocator's own words all mean memory ran out.
+          const memory = code === 3 || code === null || /bad alloc|out of memory|allocate/i.test(err);
+          reject(new LocalCutoutError(memory ? OUT_OF_MEMORY : `The cutout failed: ${err.trim().split("\n").pop() || `exit ${code}`}`));
+        });
+      });
+    try {
+      try {
+        return await once();
+      } catch (e) {
+        if (!(e instanceof LocalCutoutError) || e.message !== OUT_OF_MEMORY) throw e;
+        await new Promise((r) => setTimeout(r, Number(process.env.EFJ_CUTOUT_RETRY_MS) || 5000));
+        return await once();
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
 export function localCutout(input: Buffer): Promise<LocalCutoutResult> {
   const file = localModelPath();
   if (!file) throw new LocalCutoutError("No local cutout model is installed. Run: node scripts/get-birefnet.mjs lite");

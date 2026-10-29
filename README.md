@@ -101,6 +101,25 @@ takes a few minutes. It is much faster plugged in. The graphics chip (Intel Arc)
 The lite model is smaller than the one fal.ai runs, so fine chains can come out slightly ragged. Zoom in and check the edges before approving.
 Models are stored in `~/.efj-studio/models` (outside the project, so OneDrive does not upload them).
 
+## Instagram kit from a folder of photos (`npm run insta`)
+
+The standard way to turn new product photos into Instagram images, all on this computer. In Claude Code, `/instagram-kit`
+does every step for you, including checking the photos and writing the post notes.
+
+```
+npm run insta -- path/to/photos clover-set                 # one product per folder
+npm run insta -- path/to/photos clover-set --drop-dark     # also remove a black velvet bust or pad
+npm run insta -- --check instagram/clover-set/clover-set_post-notes.md   # banned-wording check before posting
+```
+
+For each photo you get a 4:5 feed image, a square, a Story and a 4:5 close-up in `instagram/<product>/`, plus a
+`<product>_post-notes.md` to fill in. Only the background is replaced. Every image carries the shop logo (the one
+uploaded in Settings, or the typeset placeholder). Each run picks the next of seven templates that suits the piece
+(ivory, gilded-frame, blush-arch and noir for gold-tone; noir, stone, horizon and sage-frame for silver-tone; horizon for
+both), so the grid keeps changing. `--template <name>` picks one. Other options: `--skip <file>` leaves a photo out,
+`--crop <file>=l,t,w,h` keeps part of a photo before the cutout, `--closeup <file>=l,t,w,h` picks the close-up by hand.
+Cutouts are cached in `instagram/<product>/.cutouts`, so a re-run with another template takes seconds.
+
 ## AI providers (hosted, except the optional cutout above)
 
 Two jobs, chosen separately in `.env.local` (see `.env.example`):
