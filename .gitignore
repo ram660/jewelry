@@ -26,6 +26,9 @@ next-env.d.ts
 /relay-data/
 /cutout-test/
 
+# Stock photos and videos (scripts/stock-images.mts); credits.csv lives with them
+/stock/
+
 # Instagram kits: your product photos and their renders
 /instagram/
 

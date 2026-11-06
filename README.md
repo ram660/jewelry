@@ -120,6 +120,22 @@ both), so the grid keeps changing. `--template <name>` picks one. Other options:
 `--crop <file>=l,t,w,h` keeps part of a photo before the cutout, `--closeup <file>=l,t,w,h` picks the close-up by hand.
 Cutouts are cached in `instagram/<product>/.cutouts`, so a re-run with another template takes seconds.
 
+## Stock photos and videos for teaching posts (`npm run stock`)
+
+Free pictures and short clips for styling guides, care tips, occasion boards and Reels B-roll. They are **never
+product photos**: don't put them in a product, a kit or a price post. They come only from the official Pexels, Pixabay
+and Unsplash APIs, with the free keys in `.env.local` (see `.env.example`).
+
+```
+npm run stock -- scripts/stock-themes.txt --must "jewel,necklace,earring,ring,bracelet,bangle,pearl,pendant,chain,anklet,gem"
+npm run stock -- "https://unsplash.com/s/photos/ear-stack" --theme 03_ear_stacks --max 30
+```
+
+Each line of `scripts/stock-themes.txt` is `theme_folder | site: words` (or a full link); `pexels videos:` and
+`pixabay videos:` fetch clips. Files go to `stock/<theme>/` (not committed), with `stock/credits.csv` recording author,
+page and licence. Results tagged AI-generated are skipped. Running it again skips files already downloaded, which helps
+with Unsplash demo keys (50 requests an hour). In Claude Code, `/stock-images` does the same with the rules above.
+
 ## AI providers (hosted, except the optional cutout above)
 
 Two jobs, chosen separately in `.env.local` (see `.env.example`):

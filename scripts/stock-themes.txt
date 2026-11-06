@@ -1,0 +1,32 @@
+# Stock searches for education and mood posts:  theme_folder | site: words   (or  theme_folder | full link)
+# Run: npm run stock -- scripts/stock-themes.txt --must "jewel,necklace,earring,ring,bracelet,bangle,pearl,pendant,chain,anklet,gem"
+# These are never product photos. See .claude/skills/stock-images/SKILL.md for how they may be used.
+
+01_everyday_gold_tone     | pixabay: gold necklace
+01_everyday_gold_tone     | pixabay: gold hoop earrings
+02_necklace_layering      | pixabay: layered necklaces
+02_necklace_layering      | pixabay: necklace woman neck
+02_necklace_layering      | unsplash: layered necklaces
+03_ear_stacks             | pixabay: earrings ear
+03_ear_stacks             | unsplash: ear stack
+04_ring_stacking          | pixabay: rings hand
+04_ring_stacking          | unsplash: stacked rings
+05_bracelets_bangles      | pixabay: bracelet wrist
+05_bracelets_bangles      | pixabay: bangles
+06_silver_and_mixed       | pixabay: silver jewelry
+07_pearls                 | pixabay: pearl necklace
+07_pearls                 | pixabay: pearl earrings
+08_party_statement        | pixabay: statement earrings
+08_party_statement        | pixabay: evening jewelry
+09_south_asian_wedding    | pixabay: indian bridal jewelry
+09_south_asian_wedding    | pixabay: indian jewellery
+10_colour_stones          | pixabay: gemstone ring
+11_care_and_storage       | pixabay: jewelry box
+12_minimal_office         | pixabay: minimalist jewelry
+13_flatlay                | pixabay: jewelry flat lay
+
+# Reels B-roll (short clips)
+20_reels_broll            | pixabay videos: jewelry
+20_reels_broll            | pixabay videos: necklace
+20_reels_broll            | pexels videos: putting on necklace
+20_reels_broll            | pexels videos: jewelry close up
